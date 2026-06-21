@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore, useTournament } from '../store/useStore';
 import { calcPoolStats, calcGlobalStats, applyAdvancement } from '../utils/ranking';
 import { exportPoolCSV, downloadCSV } from '../utils/csv';
 import { printPoolResults } from '../utils/pdf';
@@ -101,9 +101,9 @@ function ScoreInput({
   );
 }
 
-function PoolCard({ pool }: { pool: Pool }) {
-  const { tournament, updateBout } = useStore();
-  const fencers = pool.fencerIds.map(id => tournament.fencers.find(f => f.id === id)!).filter(Boolean);
+function PoolCard({ pool, allFencers }: { pool: Pool; allFencers: import('../types').Fencer[] }) {
+  const { updateBout } = useStore();
+  const fencers = pool.fencerIds.map(id => allFencers.find(f => f.id === id)!).filter(Boolean);
   const statsMap = calcPoolStats(pool, pool.fencerIds);
   const ranked = [...fencers].sort((a, b) => {
     const sa = statsMap.get(a.id);
@@ -222,7 +222,9 @@ function PoolCard({ pool }: { pool: Pool }) {
 }
 
 export default function PoolView() {
-  const { tournament, setAppPhase } = useStore();
+  const { setAppPhase } = useStore();
+  const tournament = useTournament();
+  if (!tournament) return null;
 
   const allComplete = tournament.pools.every(pool =>
     pool.bouts.every(b => b.winner !== null)
@@ -284,7 +286,7 @@ export default function PoolView() {
 
       <div className="grid gap-6">
         {tournament.pools.map(pool => (
-          <PoolCard key={pool.id} pool={pool} />
+          <PoolCard key={pool.id} pool={pool} allFencers={tournament.fencers} />
         ))}
       </div>
     </div>

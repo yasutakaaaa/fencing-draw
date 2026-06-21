@@ -1,4 +1,4 @@
-import { useStore } from '../store/useStore';
+import { useStore, useTournament } from '../store/useStore';
 import { calcGlobalStats, applyAdvancement } from '../utils/ranking';
 import { exportDEResultsCSV, downloadCSV } from '../utils/csv';
 import { printDEResults } from '../utils/pdf';
@@ -123,7 +123,9 @@ function MatchCard({
 }
 
 export default function BracketView() {
-  const { tournament, setAppPhase, updateDEMatch, confirmDEMatch, revertDEMatch } = useStore();
+  const { setAppPhase, updateDEMatch, confirmDEMatch, revertDEMatch } = useStore();
+  const tournament = useTournament();
+  if (!tournament) return null;
   const { deMatches, dePhase } = tournament;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);

@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore, useTournament } from '../store/useStore';
 import { calcGlobalStats, applyAdvancement } from '../utils/ranking';
 import { downloadAllCSV, exportFinalCSV, downloadCSV } from '../utils/csv';
 import { printFinalResults } from '../utils/pdf';
 
 export default function ResultsView() {
-  const { tournament, setAppPhase, exportJSON, resetTournament, saveTournamentLog } = useStore();
+  const { setAppPhase, exportJSON, resetTournament, saveTournamentLog } = useStore();
+  const tournament = useTournament();
   const [savedLogId, setSavedLogId] = useState<string | null>(null);
+
+  if (!tournament) return null;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);
   const statsWithAdv = applyAdvancement(

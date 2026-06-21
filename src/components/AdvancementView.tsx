@@ -1,10 +1,12 @@
-import { useStore } from '../store/useStore';
+import { useStore, useTournament } from '../store/useStore';
 import { calcGlobalStats, applyAdvancement } from '../utils/ranking';
 import { exportPoolCSV, exportAdvancementCSV, downloadCSV } from '../utils/csv';
 import { printPoolResults, printAdvancement } from '../utils/pdf';
 
 export default function AdvancementView() {
-  const { tournament, setAppPhase, generateBracket } = useStore();
+  const { setAppPhase, generateBracket } = useStore();
+  const tournament = useTournament();
+  if (!tournament) return null;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);
   const statsWithAdv = applyAdvancement(

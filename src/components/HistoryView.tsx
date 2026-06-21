@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore';
+// HistoryView: ログ一覧モーダル（管理モード内から開く）
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('ja-JP', {

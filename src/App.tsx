@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useStore } from './store/useStore';
+import { useStore, useTournament } from './store/useStore';
+import HomeView from './components/HomeView';
 import EntryManager from './components/EntryManager';
 import PoolView from './components/PoolView';
 import AdvancementView from './components/AdvancementView';
 import BracketView from './components/BracketView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
+import ViewerView from './components/ViewerView';
 import type { AppPhase } from './types';
 
 const STEPS: { phase: AppPhase; label: string }[] = [
@@ -19,55 +21,93 @@ const STEPS: { phase: AppPhase; label: string }[] = [
 const PHASE_ORDER: AppPhase[] = ['entry', 'pool', 'advancement', 'bracket', 'results'];
 
 export default function App() {
-  const { tournament, logs, importJSON } = useStore();
+  const { closeTournament, logs, exportTournamentJSON, viewMode, setViewMode } = useStore();
+  const tournament = useTournament();
   const [showHistory, setShowHistory] = useState(false);
+
+  // ─── ホーム画面 ───────────────────────────────────────────────
+  if (!tournament) {
+    return <HomeView />;
+  }
+
+  // ─── 閲覧モード ───────────────────────────────────────────────
+  if (viewMode === 'viewer') {
+    return <ViewerView />;
+  }
+
+  // ─── 管理モード ───────────────────────────────────────────────
   const currentPhaseIdx = PHASE_ORDER.indexOf(tournament.appPhase);
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => { importJSON(ev.target?.result as string); };
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
+  const handleExportJSON = () => {
+    const json = exportTournamentJSON(tournament.id);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${tournament.name || '大会'}_${tournament.date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-blue-700 shadow-md print:hidden">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-3">
+            <button
+              className="text-blue-300 hover:text-white text-sm transition-colors"
+              onClick={closeTournament}
+              title="大会一覧に戻る"
+            >
+              ← 一覧
+            </button>
             <div className="text-white text-2xl font-black tracking-tight">
               Fencing<span className="text-blue-300">Draw</span>
             </div>
             {tournament.name && (
-              <span className="text-blue-200 text-sm border border-blue-500 rounded-full px-3 py-0.5">
+              <span className="text-blue-200 text-sm border border-blue-500 rounded-full px-3 py-0.5 hidden sm:inline">
                 {tournament.name}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 管理/閲覧 切替 */}
+            <div className="flex rounded-lg overflow-hidden border border-blue-500">
+              <button
+                className="text-xs px-3 py-1.5 font-medium bg-white text-blue-700"
+              >
+                管理
+              </button>
+              <button
+                className="text-xs px-3 py-1.5 font-medium text-blue-200 hover:text-white hover:bg-blue-600 transition-colors"
+                onClick={() => setViewMode('viewer')}
+              >
+                閲覧
+              </button>
+            </div>
             <button
               className="relative text-blue-200 hover:text-white text-xs cursor-pointer border border-blue-500 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors"
               onClick={() => setShowHistory(true)}
             >
-              試合ログ
+              ログ
               {logs.length > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-gray-800 text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
                   {logs.length > 9 ? '9+' : logs.length}
                 </span>
               )}
             </button>
-            <label className="text-blue-200 hover:text-white text-xs cursor-pointer border border-blue-500 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors">
-              JSONから復元
-              <input type="file" accept=".json" className="hidden" onChange={handleImport} />
-            </label>
+            <button
+              className="text-blue-200 hover:text-white text-xs cursor-pointer border border-blue-500 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors"
+              onClick={handleExportJSON}
+            >
+              JSONエクスポート
+            </button>
           </div>
         </div>
 
         {/* Step indicator */}
-        <div className="max-w-6xl mx-auto px-4 pb-3">
-          <div className="flex items-center gap-0">
+        <div className="max-w-6xl mx-auto px-4 pb-3 overflow-x-auto">
+          <div className="flex items-center gap-0 min-w-max">
             {STEPS.map((step, idx) => {
               const isPast = idx < currentPhaseIdx;
               const isCurrent = idx === currentPhaseIdx;

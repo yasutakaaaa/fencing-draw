@@ -1,5 +1,7 @@
 export type Weapon = 'フルーレ' | 'エペ' | 'サーブル';
 export type Gender = '男子' | '女子' | '混合';
+export type AgeCategory = 'ベテラン' | 'シニア' | 'ジュニア' | 'カデ' | 'その他';
+export type TournamentStatus = '準備中' | '進行中' | '終了';
 export type PhaseType = 'pool' | 'de';
 export type AdvancementType = 'percent' | 'count';
 export type AppPhase = 'entry' | 'pool' | 'advancement' | 'bracket' | 'results';
@@ -11,7 +13,7 @@ export interface Fencer {
   lastNameKana: string;
   firstNameKana: string;
   club: string;
-  note?: string; // 競技歴
+  grade?: string; // 学年（任意）
 }
 
 export interface Bout {
@@ -75,7 +77,9 @@ export interface Tournament {
   date: string;
   weapon: Weapon;
   gender: Gender;
-  showCompetitiveHistory: boolean;
+  ageCategory: AgeCategory;
+  ageCategoryCustom?: string;
+  status: TournamentStatus;
   fencers: Fencer[];
   poolPhase: PoolPhaseConfig;
   dePhase: DEPhaseConfig;
