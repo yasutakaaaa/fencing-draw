@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { useStore } from '../store/useStore';
 import type { TournamentStatus } from '../types';
 
@@ -19,18 +18,8 @@ function StatusBadge({ status }: { status: TournamentStatus }) {
 export default function HomeView() {
   const {
     tournaments, createTournament, openTournament, duplicateTournament,
-    deleteTournament, setTournamentStatus, importTournamentJSON,
+    deleteTournament, setTournamentStatus,
   } = useStore();
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => importTournamentJSON(ev.target?.result as string);
-    reader.readAsText(file, 'UTF-8');
-    e.target.value = '';
-  };
 
   const handleDelete = (id: string, name: string) => {
     if (!confirm(`「${name || '無題大会'}」を削除しますか？\nこの操作は取り消せません。`)) return;
@@ -54,10 +43,6 @@ export default function HomeView() {
             Fencing<span className="text-blue-300">Draw</span>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-blue-200 hover:text-white text-xs cursor-pointer border border-blue-500 hover:border-blue-300 px-3 py-2 rounded-lg transition-colors">
-              JSONインポート
-              <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-            </label>
             <button
               className="bg-white text-blue-700 hover:bg-blue-50 font-bold text-sm px-4 py-2 rounded-lg transition-colors shadow"
               onClick={createTournament}

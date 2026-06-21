@@ -71,11 +71,13 @@ export default function ViewerView() {
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
+            {/* 管理モードへの切替は目立たない小さなボタン */}
             <button
-              className="text-slate-300 hover:text-white border border-slate-500 hover:border-slate-300 px-3 py-1.5 rounded-lg text-xs transition-colors"
+              className="text-slate-500 hover:text-slate-300 text-xs px-2 py-1 rounded transition-colors"
               onClick={() => setViewMode('admin')}
+              title="管理モードへ切替"
             >
-              管理モードへ
+              ✎ 編集
             </button>
           </div>
         </div>

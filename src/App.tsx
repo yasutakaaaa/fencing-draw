@@ -71,20 +71,16 @@ export default function App() {
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* 管理/閲覧 切替 */}
-            <div className="flex rounded-lg overflow-hidden border border-blue-500">
-              <button
-                className="text-xs px-3 py-1.5 font-medium bg-white text-blue-700"
-              >
-                管理
-              </button>
-              <button
-                className="text-xs px-3 py-1.5 font-medium text-blue-200 hover:text-white hover:bg-blue-600 transition-colors"
-                onClick={() => setViewMode('viewer')}
-              >
-                閲覧
-              </button>
-            </div>
+            {/* 管理モード中バッジ + 閲覧に戻るボタン */}
+            <span className="text-xs bg-yellow-400 text-yellow-900 font-bold px-2 py-0.5 rounded-full">
+              編集中
+            </span>
+            <button
+              className="text-xs font-medium bg-white hover:bg-blue-50 text-blue-700 border border-white px-3 py-1.5 rounded-lg transition-colors"
+              onClick={() => setViewMode('viewer')}
+            >
+              ← 閲覧に戻る
+            </button>
             <button
               className="relative text-blue-200 hover:text-white text-xs cursor-pointer border border-blue-500 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors"
               onClick={() => setShowHistory(true)}

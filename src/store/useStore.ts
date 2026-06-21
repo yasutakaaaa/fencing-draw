@@ -129,7 +129,7 @@ export const useStore = create<StoreState>()(
       },
 
       openTournament: (id) => {
-        set({ currentId: id, viewMode: 'admin' });
+        set({ currentId: id, viewMode: 'viewer' });
       },
 
       closeTournament: () => {
