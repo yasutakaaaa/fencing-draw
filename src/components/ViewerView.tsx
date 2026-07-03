@@ -193,20 +193,30 @@ function readTabFromHash(): Tab | null {
 }
 
 export default function ViewerView() {
-  const { setViewMode, closeTournament, events, user, lastUpdated, conflictWarning, dismissConflict } = useStore();
+  const { setViewMode, closeTournament, closeEvent, openTournament, events, tournaments, user, lastUpdated, conflictWarning, dismissConflict } = useStore();
+  const currentEventId = useStore(s => s.currentEventId);
   const tournament = useTournament();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>(() => readTabFromHash() ?? 'entry');
   const [showLogin, setShowLogin] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showCatSelector, setShowCatSelector] = useState(false);
 
   if (!tournament) return null;
 
-  const eventId = tournament.eventId ?? '';
+  const eventId = tournament.eventId ?? currentEventId ?? '';
   const event = events.find(e => e.id === eventId);
   const isOwner = !!user && (user.id === event?.ownerId || !event?.ownerId);
   const eventName = event?.name ?? tournament.name;
   const catLabel = tournament.name || categoryLabel(tournament);
+
+  // 同一イベント内の他カテゴリ
+  const siblingCategories = event
+    ? event.categoryIds
+        .map(id => tournaments.find(t => t.id === id))
+        .filter(Boolean)
+        .filter(t => t!.id !== tournament.id) as typeof tournaments
+    : [];
 
   const handleEditClick = () => {
     if (isOwner) setViewMode('admin');
@@ -216,8 +226,13 @@ export default function ViewerView() {
   // タブ変化を URL ハッシュに同期
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateHash = useCallback((tab: Tab) => {
-    window.location.hash = `/t/${tournament.id}?tab=${tab}`;
-  }, [tournament.id]);
+    const evtId = tournament.eventId ?? currentEventId ?? '';
+    if (evtId) {
+      window.location.hash = `/t/${evtId}/c/${tournament.id}?tab=${tab}`;
+    } else {
+      window.location.hash = `/t/${tournament.id}?tab=${tab}`;
+    }
+  }, [tournament.id, tournament.eventId, currentEventId]);
 
   useEffect(() => {
     updateHash(activeTab);
@@ -306,28 +321,68 @@ export default function ViewerView() {
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
       <header className="bg-slate-700 shadow print:hidden">
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          {/* 上段: ロゴ + 大会名 + 管理ボタン */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <span className="text-white font-black text-xl tracking-tight shrink-0">
-                Fencing<span className="text-slate-300">Draw</span>
-              </span>
-              <div className="min-w-0">
-                <span className="text-slate-200 text-sm font-medium truncate block">{eventName}</span>
-                <span className="text-slate-400 text-xs truncate block">{catLabel}</span>
-              </div>
+        <div className="max-w-6xl mx-auto px-3 py-2">
+          {/* 上段: ナビ + 大会名 + アクション */}
+          <div className="flex items-center gap-2 min-w-0">
+            {/* 大会に戻る */}
+            <button
+              className="text-slate-300 hover:text-white text-sm px-1 py-1 rounded transition-colors shrink-0"
+              onClick={closeTournament}
+            >
+              ← 大会
+            </button>
+
+            {/* ロゴ (タップでホームへ) */}
+            <button
+              className="text-white font-black text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity"
+              onClick={closeEvent}
+              title="ホームへ"
+            >
+              Fencing<span className="text-slate-300">Draw</span>
+            </button>
+
+            {/* 大会名 + カテゴリ (sm以上) */}
+            <div className="min-w-0 hidden sm:block ml-1">
+              <span className="text-slate-200 text-xs font-medium truncate block leading-tight">{eventName}</span>
+              <span className="text-slate-400 text-xs truncate block leading-tight">{catLabel}</span>
             </div>
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <button
-                className="text-slate-300 hover:text-white text-sm px-2 py-1 rounded transition-colors"
-                onClick={closeTournament}
-              >
-                ← 一覧
-              </button>
+
+            {/* カテゴリ切替 */}
+            {siblingCategories.length > 0 && (
+              <div className="relative hidden md:block">
+                <button
+                  className="text-xs border border-slate-500 text-slate-300 hover:text-white px-2 py-1 rounded transition-colors"
+                  onClick={() => setShowCatSelector(v => !v)}
+                >
+                  ▼ 他
+                </button>
+                {showCatSelector && (
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 min-w-40">
+                    {siblingCategories.map(cat => (
+                      <button
+                        key={cat.id}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                        onClick={() => { openTournament(cat.id); setShowCatSelector(false); }}
+                      >
+                        {cat.name || categoryLabel(cat)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 右側アクション */}
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+              {/* 最終更新時刻 */}
+              {lastUpdatedStr && (
+                <span className="text-xs text-slate-400 hidden sm:inline whitespace-nowrap">
+                  最終更新 {lastUpdatedStr}
+                </span>
+              )}
               {/* 共有ボタン */}
               <button
-                className="text-xs px-3 py-1.5 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors"
+                className="text-xs px-2.5 py-1 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors"
                 onClick={handleShare}
                 title="このページのURLをコピー"
               >
@@ -335,19 +390,13 @@ export default function ViewerView() {
               </button>
               {/* 印刷ボタン */}
               <button
-                className="text-xs px-3 py-1.5 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors hidden sm:inline"
+                className="text-xs px-2.5 py-1 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors hidden sm:inline"
                 onClick={() => window.print()}
                 title="印刷（プール表・トーナメント）"
               >🖨 印刷</button>
-              {/* 最終更新時刻 */}
-              {lastUpdatedStr && (
-                <span className="text-xs text-slate-400 hidden sm:inline">
-                  最終更新 {lastUpdatedStr}
-                </span>
-              )}
               {/* 編集ボタン */}
               <button
-                className={`text-xs px-3 py-1.5 rounded border transition-colors font-medium ${
+                className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
                   isOwner
                     ? 'border-blue-400 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600'
                     : 'border-slate-500 text-slate-400 hover:text-slate-200'
@@ -355,12 +404,13 @@ export default function ViewerView() {
                 onClick={handleEditClick}
                 title={isOwner ? '管理モードへ切替' : 'ログインして編集'}
               >
-                {isOwner ? '✎ 編集' : '🔑 編集（要ログイン）'}
+                {isOwner ? '✎ 編集' : '🔑 編集'}
               </button>
             </div>
           </div>
-          {/* 下段: 検索 */}
-          <div className="mt-2 flex items-center gap-2">
+
+          {/* 下段: 検索 + 更新時刻 (モバイル) */}
+          <div className="mt-1.5 flex items-center gap-2">
             <input
               type="search"
               className="border border-slate-500 bg-slate-800 text-white placeholder-slate-400 rounded-lg px-3 py-1.5 text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -368,7 +418,6 @@ export default function ViewerView() {
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
-            {/* 最終更新（モバイル） */}
             {lastUpdatedStr && (
               <span className="text-xs text-slate-400 sm:hidden whitespace-nowrap">
                 更新 {lastUpdatedStr}

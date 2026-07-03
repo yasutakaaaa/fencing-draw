@@ -193,6 +193,7 @@ interface StoreState {
   events: TournamentEvent[];
   tournaments: Tournament[];
   currentId: string | null;
+  currentEventId: string | null;
   viewMode: ViewMode;
   logs: TournamentLog[];
 
@@ -216,6 +217,8 @@ interface StoreState {
   removeCategory: (categoryId: string) => void;
 
   // ── ホーム画面 ──────────────────────────────────────────────
+  openEvent: (eventId: string) => void;
+  closeEvent: () => void;
   createTournament: () => void;
   openTournament: (id: string) => void;
   closeTournament: () => void;
@@ -343,6 +346,7 @@ export const useStore = create<StoreState>()((set, get) => {
     events: [],
     tournaments: [],
     currentId: null,
+    currentEventId: null,
     viewMode: 'viewer',
     logs: [],
     lastUpdated: null,
@@ -436,7 +440,7 @@ export const useStore = create<StoreState>()((set, get) => {
 
     signOut: async () => {
       await supabase.auth.signOut();
-      set({ user: null, currentId: null, viewMode: 'viewer' });
+      set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer' });
     },
 
     migrateFromLocalStorage: async () => {
@@ -510,6 +514,7 @@ export const useStore = create<StoreState>()((set, get) => {
         events: s.events.filter(e => e.id !== id),
         tournaments: s.tournaments.filter(t => !keepIds.has(t.id)),
         currentId: keepIds.has(s.currentId ?? '') ? null : s.currentId,
+        currentEventId: s.currentEventId === id ? null : s.currentEventId,
       }));
       await supabase.from('tournaments').delete().eq('id', id);
     },
@@ -533,17 +538,25 @@ export const useStore = create<StoreState>()((set, get) => {
         tournaments: s.tournaments.filter(t => t.id !== categoryId),
         events: s.events.map(e => ({ ...e, categoryIds: e.categoryIds.filter(id => id !== categoryId) })),
         currentId: s.currentId === categoryId ? null : s.currentId,
+        currentEventId: s.currentId === categoryId ? (eventId ?? null) : s.currentEventId,
       }));
       if (eventId) saveEvent(eventId);
     },
 
     // ── ホーム画面 ──────────────────────────────────────────
+    openEvent: (eventId) => set({ currentEventId: eventId, currentId: null }),
+    closeEvent: () => set({ currentEventId: null, currentId: null }),
+
     createTournament: () => {
       const t = defaultTournament();
       set(s => ({ tournaments: [t, ...s.tournaments], currentId: t.id, viewMode: 'admin' }));
     },
 
-    openTournament: (id) => set({ currentId: id, viewMode: 'viewer' }),
+    openTournament: (id) => {
+      const { tournaments } = get();
+      const t = tournaments.find(x => x.id === id);
+      set({ currentId: id, viewMode: 'viewer', currentEventId: t?.eventId ?? null });
+    },
     closeTournament: () => set({ currentId: null }),
 
     duplicateTournament: (id) => {

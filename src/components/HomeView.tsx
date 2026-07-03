@@ -66,7 +66,7 @@ function CreateEventModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
 // ── カテゴリ追加モーダル（大会作成直後） ─────────────────────────────
 function AddFirstCategoryModal({ eventId, onClose }: { eventId: string; onClose: () => void }) {
-  const { addCategory, openTournament, setViewMode } = useStore();
+  const { addCategory, openTournament, setViewMode, openEvent } = useStore();
   const [weapon, setWeapon] = useState<Weapon>('フルーレ');
   const [gender, setGender] = useState<Gender>('男子');
   const [format, setFormat] = useState<TournamentFormat>('個人');
@@ -74,6 +74,7 @@ function AddFirstCategoryModal({ eventId, onClose }: { eventId: string; onClose:
   const [ageCategoryCustom, setAgeCategoryCustom] = useState('');
   const handleAdd = () => {
     const id = addCategory(eventId, weapon, gender, ageCategory, ageCategoryCustom, format);
+    openEvent(eventId);
     openTournament(id);
     setViewMode('admin');
     onClose();
@@ -163,50 +164,29 @@ function Pagination({ page, total, onChange }: { page: number; total: number; on
 }
 
 // ── イベント行 ────────────────────────────────────────────────────────
-function EventRow({ event, isExpanded, onToggle }: {
-  event: TournamentEvent;
-  isExpanded: boolean;
-  onToggle: () => void;
-}) {
-  const { tournaments, openTournament } = useStore();
-  const categories = event.categoryIds
-    .map(id => tournaments.find(t => t.id === id))
-    .filter(Boolean) as (typeof tournaments[0])[];
+function EventRow({ event }: { event: TournamentEvent }) {
+  const { tournaments, openEvent } = useStore();
+  const catCount = event.categoryIds.length;
+  const totalFencers = event.categoryIds.reduce((sum, id) => {
+    const t = tournaments.find(x => x.id === id);
+    return sum + (t?.fencers.length ?? 0);
+  }, 0);
 
   return (
     <div className="border-b border-gray-100 last:border-b-0">
       <div
         className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer select-none text-sm"
-        onClick={onToggle}
+        onClick={() => openEvent(event.id)}
       >
         <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${STATUS_STYLE[event.status]}`}>
           {event.status}
         </span>
         <span className="flex-1 font-medium text-gray-800 truncate min-w-0">{event.name}</span>
-        <span className="text-gray-400 text-xs w-32 truncate hidden sm:block">{event.venue || '—'}</span>
+        <span className="text-gray-400 text-xs hidden sm:block shrink-0">{catCount}カテゴリ / {totalFencers}名</span>
+        <span className="text-gray-400 text-xs w-32 truncate hidden md:block">{event.venue || '—'}</span>
         <span className="text-gray-400 text-xs w-24 shrink-0 text-right">{event.date.replace(/-/g, '/')}</span>
-        <span className="text-gray-300 text-xs w-4">{isExpanded ? '▲' : '▼'}</span>
+        <span className="text-gray-300 text-xs w-4">›</span>
       </div>
-      {isExpanded && (
-        <div className="bg-gray-50/70 border-t border-gray-100 px-6 py-2 space-y-1">
-          {categories.length === 0 ? (
-            <p className="text-xs text-gray-400 py-1">カテゴリがありません</p>
-          ) : (
-            categories.map(t => (
-              <div key={t.id} className="flex items-center gap-3 py-1">
-                <span className="text-sm text-gray-700 flex-1 min-w-0">{t.name || categoryLabel(t)}</span>
-                <span className="text-xs text-gray-400">{t.fencers.length}名</span>
-                <button
-                  className="text-xs font-medium text-blue-600 hover:text-blue-800 px-3 py-0.5 border border-blue-200 hover:border-blue-400 rounded-full transition-colors"
-                  onClick={e => { e.stopPropagation(); openTournament(t.id); }}
-                >
-                  開く →
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -218,7 +198,6 @@ export default function HomeView() {
   const { events, user, signOut, hasLocalData, migrateFromLocalStorage, saveStatus } = useStore();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [activePage, setActivePage] = useState(0);
   const [archivePage, setArchivePage] = useState(0);
   const [showArchive, setShowArchive] = useState(false);
@@ -249,12 +228,9 @@ export default function HomeView() {
   const activePages  = Math.max(1, Math.ceil(active.length / PAGE_SIZE));
   const archivePages = Math.max(1, Math.ceil(archive.length / PAGE_SIZE));
 
-  const toggle = (id: string) =>
-    setExpandedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-
   const renderRows = (list: TournamentEvent[]) =>
     list.map(event => (
-      <EventRow key={event.id} event={event} isExpanded={expandedIds.has(event.id)} onToggle={() => toggle(event.id)} />
+      <EventRow key={event.id} event={event} />
     ));
 
   const handleMigrate = async () => {
@@ -315,7 +291,7 @@ export default function HomeView() {
           {([['all','すべて'],['実施中','進行中'],['未','準備中'],['終了','終了']] as [StatusFilter, string][]).map(([val, label]) => (
             <button
               key={val}
-              onClick={() => { setStatusFilter(val); setActivePage(0); setArchivePage(0); setExpandedIds(new Set()); }}
+              onClick={() => { setStatusFilter(val); setActivePage(0); setArchivePage(0); }}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                 statusFilter === val
                   ? 'bg-blue-600 text-white'
@@ -381,7 +357,7 @@ export default function HomeView() {
         ) : (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-2 shadow-sm">
             {renderRows(activePaged)}
-            <Pagination page={activePage} total={activePages} onChange={p => { setActivePage(p); setExpandedIds(new Set()); }} />
+            <Pagination page={activePage} total={activePages} onChange={setActivePage} />
           </div>
         )}
 
@@ -398,7 +374,7 @@ export default function HomeView() {
             {showArchive && (
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm opacity-80">
                 {renderRows(archivePaged)}
-                <Pagination page={archivePage} total={archivePages} onChange={p => { setArchivePage(p); setExpandedIds(new Set()); }} />
+                <Pagination page={archivePage} total={archivePages} onChange={setArchivePage} />
               </div>
             )}
           </div>

@@ -303,8 +303,8 @@ test('12 - 管理モードから一覧に戻る', async ({ page }) => {
   await openE2ETournamentAdmin(page);
   await expect(page.locator('text=エントリー').first()).toBeVisible({ timeout: 5000 });
 
-  // 「← 一覧」ボタンで戻る
-  await page.locator('button').filter({ hasText: /← 一覧/ }).first().click();
+  // 「← 大会」ボタンで大会ページへ戻る
+  await page.locator('button').filter({ hasText: /← 大会/ }).first().click();
   await page.waitForTimeout(500);
   await expect(page.locator('text=FencingDraw').first()).toBeVisible();
   await expect(page.locator('text=E2Eテスト大会2026').first()).toBeVisible();

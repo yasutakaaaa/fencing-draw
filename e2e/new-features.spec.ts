@@ -72,12 +72,15 @@ test('F04 - 【完了】大会のカテゴリ確認', async ({ page }) => {
 
 test('F05 - プール戦進行中: 通過判定タブが非表示', async ({ page }) => {
   await waitForApp(page);
-  // 【進行中】大会のシニア男子エペ（pool-running状態）を開く
+  // 【進行中】大会のシニア男子エペ（pool-running状態）を名前で特定して開く
   const row = page.locator('text=【進行中】東京都選手権').first();
   await row.click();
   await page.waitForTimeout(400);
-  const openBtn = page.locator('button').filter({ hasText: '開く →' }).first();
-  await expect(openBtn).toBeVisible({ timeout: 5000 });
+  // カテゴリ名「シニア男子エペ」の含まれるカード内の「開く →」をクリック
+  await expect(page.locator('text=シニア男子エペ').first()).toBeVisible({ timeout: 5000 });
+  // p.font-semibold からカード div (bg-white) まで ancestor を辿ってボタンをクリック
+  const openBtn = page.locator('p.font-semibold').filter({ hasText: 'シニア男子エペ' })
+    .locator('xpath=ancestor::div[contains(@class,"bg-white")][1]//button[contains(text(),"開く")]');
   await openBtn.click();
   await expect(page.locator('text=エントリー選手')).toBeVisible({ timeout: 6000 });
 

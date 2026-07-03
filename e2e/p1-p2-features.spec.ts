@@ -262,7 +262,11 @@ test('P1-1e - 一覧に戻るとURLハッシュがクリアされる', async ({ 
   await expect(page.locator('text=エントリー選手')).toBeVisible({ timeout: 8000 });
   await page.waitForFunction(() => window.location.hash.startsWith('#/t/'), { timeout: 5000 });
 
-  // 一覧に戻る
+  // ← 大会 で大会ページへ戻る
+  await page.locator('button').filter({ hasText: '← 大会' }).first().click();
+  await page.waitForTimeout(400);
+
+  // 大会ページから ← 一覧 でホームへ
   await page.locator('button').filter({ hasText: '← 一覧' }).first().click();
   await page.waitForTimeout(500);
 
