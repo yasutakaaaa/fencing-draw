@@ -5,19 +5,17 @@ import { downloadAllCSV, exportFinalCSV, downloadCSV } from '../utils/csv';
 import { printFinalResults } from '../utils/pdf';
 
 export default function ResultsView() {
-  const { setAppPhase, exportJSON, resetTournament, saveTournamentLog } = useStore();
+  const { goToPreviousPhase, exportJSON, resetTournament, saveTournamentLog } = useStore();
   const tournament = useTournament();
   const [savedLogId, setSavedLogId] = useState<string | null>(null);
 
   if (!tournament) return null;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);
-  const statsWithAdv = applyAdvancement(
-    globalStats,
-    tournament.poolPhase.advancement.type,
-    tournament.poolPhase.advancement.value,
-    tournament.fencers.length
-  );
+  const advancement = tournament.poolPhase?.advancement;
+  const statsWithAdv = advancement
+    ? applyAdvancement(globalStats, advancement.type, advancement.value, tournament.fencers.length)
+    : globalStats.map(s => ({ ...s, advanced: true }));
 
   // DE最終結果
   const deMatches = tournament.deMatches;
@@ -100,7 +98,7 @@ export default function ResultsView() {
         <div className="flex gap-2 flex-wrap">
           <button
             className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg"
-            onClick={() => setAppPhase('bracket')}
+            onClick={goToPreviousPhase}
           >
             ← トーナメントに戻る
           </button>

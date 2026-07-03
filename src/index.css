@@ -4,3 +4,68 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* タッチ操作最適化 */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* ── 印刷レイアウト ─────────────────────────────────────────── */
+@media print {
+  /* UIクロームを非表示 */
+  header,
+  nav,
+  .print\:hidden,
+  button:not(.print-show) {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    font-size: 11pt;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* プール表：改ページなし */
+  .pool-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #ccc !important;
+    margin-bottom: 1cm;
+    box-shadow: none !important;
+  }
+
+  .pool-card table {
+    font-size: 9pt;
+  }
+
+  /* DEブラケット */
+  .bracket-round {
+    break-inside: avoid;
+  }
+
+  /* ページ余白 */
+  @page {
+    margin: 1cm;
+    size: A4 landscape;
+  }
+
+  /* カード系のシャドウをリセット */
+  .shadow, .shadow-sm, .shadow-md {
+    box-shadow: none !important;
+  }
+}
+
+/* ── スクロールバー非表示 ────────────────────────────────────── */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

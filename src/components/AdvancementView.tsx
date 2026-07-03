@@ -4,19 +4,22 @@ import { exportPoolCSV, exportAdvancementCSV, downloadCSV } from '../utils/csv';
 import { printPoolResults, printAdvancement } from '../utils/pdf';
 
 export default function AdvancementView() {
-  const { setAppPhase, generateBracket } = useStore();
+  const { setPoolSubPhase, startNextPhase } = useStore();
   const tournament = useTournament();
   if (!tournament) return null;
+
+  const poolPhase = tournament.poolPhase;
+  const advancement = poolPhase?.advancement;
+  if (!advancement) return null;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);
   const statsWithAdv = applyAdvancement(
     globalStats,
-    tournament.poolPhase.advancement.type,
-    tournament.poolPhase.advancement.value,
+    advancement.type,
+    advancement.value,
     tournament.fencers.length
   );
 
-  // 通過者→除外者の順に、それぞれ順位順
   const sorted = [...statsWithAdv].sort((a, b) => {
     if (a.advanced !== b.advanced) return a.advanced ? -1 : 1;
     return a.globalRank - b.globalRank;
@@ -35,12 +38,17 @@ export default function AdvancementView() {
   };
 
   const base = tournament.name || '大会';
-  const handlePoolCSV  = () => downloadCSV(exportPoolCSV(tournament, statsWithAdv), `${base}_プール結果.csv`);
-  const handlePoolPDF  = () => printPoolResults(tournament, statsWithAdv);
-  const handleAdvCSV   = () => downloadCSV(exportAdvancementCSV(tournament, statsWithAdv), `${base}_プール当落.csv`);
-  const handleAdvPDF   = () => printAdvancement(tournament, statsWithAdv);
+  const handlePoolCSV = () => downloadCSV(exportPoolCSV(tournament, statsWithAdv), `${base}_プール結果.csv`);
+  const handlePoolPDF = () => printPoolResults(tournament, statsWithAdv);
+  const handleAdvCSV  = () => downloadCSV(exportAdvancementCSV(tournament, statsWithAdv), `${base}_プール当落.csv`);
+  const handleAdvPDF  = () => printAdvancement(tournament, statsWithAdv);
 
   const dividerIdx = sorted.findIndex(s => !s.advanced);
+
+  const nextPhaseConfig = tournament.phases[tournament.activePhaseIdx + 1];
+  const nextLabel = nextPhaseConfig
+    ? nextPhaseConfig.type === 'de' ? 'トーナメント表を作成 →' : '次のプール分けを作成 →'
+    : '最終順位を確定 →';
 
   return (
     <div className="space-y-4">
@@ -54,7 +62,7 @@ export default function AdvancementView() {
         <div className="flex gap-2 flex-wrap">
           <button
             className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg"
-            onClick={() => setAppPhase('pool')}
+            onClick={() => setPoolSubPhase('running')}
           >
             ← プール戦に戻る
           </button>
@@ -70,9 +78,9 @@ export default function AdvancementView() {
           </div>
           <button
             className="text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg"
-            onClick={generateBracket}
+            onClick={startNextPhase}
           >
-            トーナメント表を作成 →
+            {nextLabel}
           </button>
         </div>
       </div>
@@ -80,9 +88,9 @@ export default function AdvancementView() {
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="bg-blue-600 px-4 py-2">
           <p className="text-white text-sm font-medium">
-            通過条件: {tournament.poolPhase.advancement.type === 'percent'
-              ? `上位${tournament.poolPhase.advancement.value}%`
-              : `上位${tournament.poolPhase.advancement.value}名`} → {advancedCount}名通過
+            通過条件: {advancement.type === 'percent'
+              ? `上位${advancement.value}%`
+              : `上位${advancement.value}名`} → {advancedCount}名通過
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -103,7 +111,6 @@ export default function AdvancementView() {
             <tbody>
               {sorted.map((s, idx) => (
                 <>
-                  {/* 通過→除外の境界線 */}
                   {idx === dividerIdx && dividerIdx > 0 && (
                     <tr key="divider">
                       <td colSpan={9} className="py-0">

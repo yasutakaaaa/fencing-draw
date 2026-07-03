@@ -123,18 +123,16 @@ function MatchCard({
 }
 
 export default function BracketView() {
-  const { setAppPhase, updateDEMatch, confirmDEMatch, revertDEMatch } = useStore();
+  const { goToPreviousPhase, startNextPhase, updateDEMatch, confirmDEMatch, revertDEMatch } = useStore();
   const tournament = useTournament();
   if (!tournament) return null;
   const { deMatches, dePhase } = tournament;
 
   const globalStats = calcGlobalStats(tournament.pools, tournament.fencers);
-  const statsWithAdv = applyAdvancement(
-    globalStats,
-    tournament.poolPhase.advancement.type,
-    tournament.poolPhase.advancement.value,
-    tournament.fencers.length
-  );
+  const advancement = tournament.poolPhase?.advancement;
+  const statsWithAdv = advancement
+    ? applyAdvancement(globalStats, advancement.type, advancement.value, tournament.fencers.length)
+    : globalStats.map(s => ({ ...s, advanced: true }));
 
   const fencerName = (id: string | null) => {
     if (!id) return '';
@@ -173,9 +171,9 @@ export default function BracketView() {
         <div className="flex gap-2 flex-wrap">
           <button
             className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg"
-            onClick={() => setAppPhase('advancement')}
+            onClick={goToPreviousPhase}
           >
-            ← 通過判定に戻る
+            ← 前のフェーズに戻る
           </button>
           <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
             <span className="text-xs text-gray-400 pl-2 pr-1">DE結果</span>
@@ -184,7 +182,7 @@ export default function BracketView() {
           </div>
           <button
             className="text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg"
-            onClick={() => setAppPhase('results')}
+            onClick={startNextPhase}
           >
             最終順位を見る →
           </button>

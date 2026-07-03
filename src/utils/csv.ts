@@ -1,4 +1,6 @@
-import type { Tournament, FencerStats } from '../types';
+import type { Tournament, Pool, DEMatch, FencerStats } from '../types';
+
+type TournamentView = Tournament & { pools: Pool[]; deMatches: DEMatch[] };
 
 function q(s: string | number) {
   return `"${String(s).replace(/"/g, '""')}"`;
@@ -8,17 +10,17 @@ function row(...cells: (string | number)[]) {
   return cells.map(c => q(c)).join(',');
 }
 
-function findFencer(t: Tournament, id: string) {
+function findFencer(t: TournamentView, id: string) {
   return t.fencers.find(f => f.id === id);
 }
 
-function fencerName(t: Tournament, id: string | null) {
+function fencerName(t: TournamentView, id: string | null) {
   if (!id) return '';
   const f = findFencer(t, id);
   return f ? `${f.lastName}${f.firstName}` : '';
 }
 
-function poolName(t: Tournament, fencerId: string) {
+function poolName(t: TournamentView, fencerId: string) {
   const pool = t.pools.find(p => p.fencerIds.includes(fencerId));
   return pool ? `P${pool.index + 1}` : '';
 }
@@ -31,7 +33,7 @@ function roundLabel(round: number, maxRound: number) {
 }
 
 // ── 1. 予選プール結果 ────────────────────────────────────────
-export function exportPoolCSV(tournament: Tournament, stats: FencerStats[]): string {
+export function exportPoolCSV(tournament: TournamentView, stats: FencerStats[]): string {
   const lines: string[] = [];
   lines.push(row('プール', 'P内順位', '氏名', '所属', '勝', '試', '勝率', '指数', '得点', '失点'));
 
@@ -53,7 +55,7 @@ export function exportPoolCSV(tournament: Tournament, stats: FencerStats[]): str
 }
 
 // ── 2. 予選プール当落（グローバル順位順・通過→除外） ─────────
-export function exportAdvancementCSV(tournament: Tournament, stats: FencerStats[]): string {
+export function exportAdvancementCSV(tournament: TournamentView, stats: FencerStats[]): string {
   const lines: string[] = [];
   lines.push(row('総合順位', 'プール', 'P内順位', '氏名', 'ふりがな', '所属', '勝率', '指数', '得点', '通過'));
 
@@ -77,7 +79,7 @@ export function exportAdvancementCSV(tournament: Tournament, stats: FencerStats[
 }
 
 // ── 3. トーナメントスコア結果 ─────────────────────────────────
-export function exportDEResultsCSV(tournament: Tournament): string {
+export function exportDEResultsCSV(tournament: TournamentView): string {
   const lines: string[] = [];
   lines.push(row('ラウンド', '対戦位置', '選手A', 'スコアA', 'スコアB', '選手B', '勝者', 'BYE', '3位決定戦'));
 
@@ -109,7 +111,7 @@ export function exportDEResultsCSV(tournament: Tournament): string {
 }
 
 // ── 4. トーナメント最終順位 ───────────────────────────────────
-export function exportFinalCSV(tournament: Tournament, stats: FencerStats[]): string {
+export function exportFinalCSV(tournament: TournamentView, stats: FencerStats[]): string {
   const lines: string[] = [];
   lines.push(row('順位', '氏名', 'ふりがな', '所属', '勝率', '指数', '得点'));
 
@@ -141,7 +143,7 @@ export function downloadCSV(content: string, filename: string) {
 
 // ── 一括DL（4ファイル、100ms間隔） ────────────────────────────
 export function downloadAllCSV(
-  tournament: Tournament,
+  tournament: TournamentView,
   stats: FencerStats[],
 ) {
   const base = tournament.name || '大会';

@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+
+# Playwright auth state (contains session tokens)
+e2e/.auth/
+
+# Test screenshots (generated at runtime)
+e2e/screenshots/

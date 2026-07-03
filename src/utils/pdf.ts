@@ -1,4 +1,6 @@
-import type { Tournament, FencerStats } from '../types';
+import type { Tournament, Pool, DEMatch, FencerStats } from '../types';
+
+type TournamentView = Tournament & { pools: Pool[]; deMatches: DEMatch[] };
 
 function esc(s: string | number) {
   return String(s)
@@ -50,13 +52,13 @@ function openPrint(title: string, body: string) {
   win.document.close();
 }
 
-function header(t: Tournament, subtitle: string) {
+function header(t: TournamentView, subtitle: string) {
   return `<h1>${esc(t.name || '大会')}</h1>` +
     `<p class="meta">${esc(t.date)} · ${esc(t.weapon)} · ${esc(t.gender)} · ${subtitle}</p>`;
 }
 
 // ── 1. プール結果 ────────────────────────────────────────────────
-export function printPoolResults(tournament: Tournament, stats: FencerStats[]) {
+export function printPoolResults(tournament: TournamentView, stats: FencerStats[]) {
   let body = header(tournament, '予選プール結果');
 
   for (const pool of tournament.pools) {
@@ -115,7 +117,7 @@ export function printPoolResults(tournament: Tournament, stats: FencerStats[]) {
 }
 
 // ── 2. 通過判定 ──────────────────────────────────────────────────
-export function printAdvancement(tournament: Tournament, stats: FencerStats[]) {
+export function printAdvancement(tournament: TournamentView, stats: FencerStats[]) {
   const sorted = [...stats].sort((a, b) => {
     if (a.advanced !== b.advanced) return a.advanced ? -1 : 1;
     return a.globalRank - b.globalRank;
@@ -150,7 +152,7 @@ export function printAdvancement(tournament: Tournament, stats: FencerStats[]) {
 }
 
 // ── 3. トーナメント結果 ─────────────────────────────────────────
-export function printDEResults(tournament: Tournament, stats: FencerStats[]) {
+export function printDEResults(tournament: TournamentView, stats: FencerStats[]) {
   const fname = (id: string | null) => {
     if (!id) return 'TBD';
     const f = tournament.fencers.find(x => x.id === id);
@@ -199,7 +201,7 @@ export function printDEResults(tournament: Tournament, stats: FencerStats[]) {
 }
 
 // ── 4. 最終順位 ──────────────────────────────────────────────────
-export function printFinalResults(tournament: Tournament, stats: FencerStats[]) {
+export function printFinalResults(tournament: TournamentView, stats: FencerStats[]) {
   const sorted = [...stats].sort((a, b) => a.globalRank - b.globalRank);
 
   let body = header(tournament, '最終順位') +
