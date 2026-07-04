@@ -186,18 +186,19 @@ const MATCH_H  = 56;  // 試合カード高さ px
 const MATCH_W  = 168; // 試合カード幅 px
 const COL_GAP  = 40;  // ラウンド間コネクタ幅 px
 
+function roundLabel(round: number, maxRound: number): string {
+  if (round === maxRound) return '決勝';
+  if (round === maxRound - 1) return '準決勝';
+  if (round === maxRound - 2) return '準々決勝';
+  return `Round ${round}`;
+}
+
 function DEMatchCard({
-  match, fname, maxRound,
-}: { match: DEMatch; fname: (id: string | null) => string; maxRound: number }) {
+  match, fname,
+}: { match: DEMatch; fname: (id: string | null) => string }) {
   const nameA = match.fencerAId ? fname(match.fencerAId) || 'TBD' : 'TBD';
   const nameB = match.fencerBId ? fname(match.fencerBId) || 'TBD' : 'TBD';
   const hasResult = match.winner !== null;
-  const isThirdPlace = match.isThirdPlace;
-  const roundLbl = isThirdPlace ? '3位決定戦'
-    : match.round === maxRound ? '決勝'
-    : match.round === maxRound - 1 ? '準決勝'
-    : match.round === maxRound - 2 ? '準々決勝'
-    : `Round ${match.round}`;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm text-xs" style={{ width: MATCH_W, height: MATCH_H }}>
@@ -282,7 +283,7 @@ function DEBracketView({ deMatches, fname }: {
           const left = colLeft(m.round);
           return (
             <div key={m.id} className="absolute" style={{ left, top }}>
-              <DEMatchCard match={m} fname={fname} maxRound={maxRound} />
+              <DEMatchCard match={m} fname={fname} />
             </div>
           );
         })}
@@ -292,7 +293,7 @@ function DEBracketView({ deMatches, fname }: {
       {thirdPlace && (
         <div className="mt-5 pt-4 border-t border-gray-100">
           <p className="text-xs font-semibold text-gray-400 mb-2">3位決定戦</p>
-          <DEMatchCard match={thirdPlace} fname={fname} maxRound={maxRound} />
+          <DEMatchCard match={thirdPlace} fname={fname} />
         </div>
       )}
     </div>
@@ -674,7 +675,7 @@ export default function ViewerView() {
                             const myScore = isA ? m.scoreA : m.scoreB;
                             const opScore = isA ? m.scoreB : m.scoreA;
                             const won = m.winner === (isA ? 'A' : 'B');
-                            const label = m.isThirdPlace ? '3位決定戦' : roundLabel(m.round);
+                            const label = m.isThirdPlace ? '3位決定戦' : roundLabel(m.round, maxRound);
                             return (
                               <div key={m.id} className={`text-xs flex items-center gap-2 px-2 py-1 rounded ${won ? 'bg-blue-50' : 'bg-gray-50'}`}>
                                 <span className="text-gray-400 w-16 shrink-0">{label}</span>

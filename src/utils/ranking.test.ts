@@ -22,7 +22,7 @@ function make8Stats(): FencerStats[] {
 }
 
 // 全試合を「上位シードが勝つ」ように進行させる
-function playAllMatches(matches: DEMatch[], winners: Map<string, string>): DEMatch[] {
+function playAllMatches(matches: DEMatch[]): DEMatch[] {
   let current = [...matches];
   const maxRound = Math.max(...current.filter(m => !m.isThirdPlace).map(m => m.round));
 
@@ -55,7 +55,7 @@ function playAllMatches(matches: DEMatch[], winners: Map<string, string>): DEMat
 describe('calcFinalRankings - 8名DEトーナメント (3決あり)', () => {
   const stats = make8Stats();
   const rawBracket = buildBracket(stats, true);
-  const played = playAllMatches(rawBracket, new Map());
+  const played = playAllMatches(rawBracket);
 
   it('f1が1位になる', () => {
     const results = calcFinalRankings(played, stats, true);
@@ -99,7 +99,7 @@ describe('calcFinalRankings - 8名DEトーナメント (3決あり)', () => {
 describe('calcFinalRankings - 8名DEトーナメント (3決なし)', () => {
   const stats = make8Stats();
   const rawBracket = buildBracket(stats, false);
-  const played = playAllMatches(rawBracket, new Map());
+  const played = playAllMatches(rawBracket);
 
   it('準決勝敗者2名が同3位', () => {
     const results = calcFinalRankings(played, stats, false);
@@ -125,7 +125,7 @@ describe('calcFinalRankings - 途中棄権あり', () => {
     );
     // f8 が advanced=false なので bracket には入らない (7名)
     const rawBracket = buildBracket(statsWithWithdraw.filter(s => s.advanced), true);
-    const played = playAllMatches(rawBracket, new Map());
+    const played = playAllMatches(rawBracket);
     const results = calcFinalRankings(played, statsWithWithdraw, true);
 
     // f8 が結果に含まれ最下位（withdrawn=true）
