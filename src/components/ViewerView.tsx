@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore, useTournament, categoryLabel } from '../store/useStore';
-import { calcGlobalStats, applyAdvancement, calcPoolStats, getBoutOrder } from '../utils/ranking';
-import type { Pool, Fencer, Bout } from '../types';
+import { calcGlobalStats, applyAdvancement, calcPoolStats, getBoutOrder, calcFinalRankings } from '../utils/ranking';
+import type { Pool, Fencer, Bout, DEMatch } from '../types';
 import LoginModal from './LoginModal';
 
 // ── フェイユ・ド・プール ───────────────────────────────────────────────
@@ -181,6 +181,124 @@ function BoutSchedule({ pool, fencers }: { pool: Pool; fencers: Fencer[] }) {
   );
 }
 
+// ── DEブラケット図 ────────────────────────────────────────────────────
+const MATCH_H  = 56;  // 試合カード高さ px
+const MATCH_W  = 168; // 試合カード幅 px
+const COL_GAP  = 40;  // ラウンド間コネクタ幅 px
+
+function DEMatchCard({
+  match, fname, maxRound,
+}: { match: DEMatch; fname: (id: string | null) => string; maxRound: number }) {
+  const nameA = match.fencerAId ? fname(match.fencerAId) || 'TBD' : 'TBD';
+  const nameB = match.fencerBId ? fname(match.fencerBId) || 'TBD' : 'TBD';
+  const hasResult = match.winner !== null;
+  const isThirdPlace = match.isThirdPlace;
+  const roundLbl = isThirdPlace ? '3位決定戦'
+    : match.round === maxRound ? '決勝'
+    : match.round === maxRound - 1 ? '準決勝'
+    : match.round === maxRound - 2 ? '準々決勝'
+    : `Round ${match.round}`;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm text-xs" style={{ width: MATCH_W, height: MATCH_H }}>
+      {/* 上段: 選手A */}
+      <div className={`flex items-center justify-between px-2 border-b border-gray-100 ${match.winner === 'A' ? 'bg-blue-50' : ''}`} style={{ height: MATCH_H / 2 }}>
+        <span className={`truncate flex-1 min-w-0 ${match.winner === 'A' ? 'font-bold text-blue-800' : 'text-gray-700'} ${!match.fencerAId ? 'text-gray-300 italic' : ''}`}>
+          {nameA}
+        </span>
+        {hasResult && (
+          <span className={`ml-1 shrink-0 font-bold tabular-nums ${match.winner === 'A' ? 'text-blue-800' : 'text-gray-400'}`}>
+            {match.scoreA ?? '-'}
+          </span>
+        )}
+      </div>
+      {/* 下段: 選手B */}
+      <div className={`flex items-center justify-between px-2 ${match.winner === 'B' ? 'bg-blue-50' : ''}`} style={{ height: MATCH_H / 2 }}>
+        <span className={`truncate flex-1 min-w-0 ${match.winner === 'B' ? 'font-bold text-blue-800' : 'text-gray-700'} ${!match.fencerBId ? 'text-gray-300 italic' : ''}`}>
+          {nameB}
+        </span>
+        {hasResult && (
+          <span className={`ml-1 shrink-0 font-bold tabular-nums ${match.winner === 'B' ? 'text-blue-800' : 'text-gray-400'}`}>
+            {match.scoreB ?? '-'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DEBracketView({ deMatches, fname }: {
+  deMatches: DEMatch[];
+  fname: (id: string | null) => string;
+}) {
+  const mainMatches = deMatches.filter(m => !m.isBye && !m.isThirdPlace);
+  const thirdPlace  = deMatches.find(m => m.isThirdPlace);
+
+  if (mainMatches.length === 0) return null;
+
+  const maxRound = mainMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
+  const r1Count  = mainMatches.filter(m => m.round === 1).length;
+  const totalH   = r1Count * MATCH_H;
+  const totalW   = maxRound * MATCH_W + (maxRound - 1) * COL_GAP;
+
+  const matchCenter = (round: number, pos: number) =>
+    (pos + 0.5) * Math.pow(2, round - 1) * MATCH_H;
+  const colLeft = (round: number) => (round - 1) * (MATCH_W + COL_GAP);
+
+  return (
+    <div className="overflow-x-auto pb-2 print:overflow-visible">
+      <div className="relative" style={{ width: totalW, height: totalH }}>
+        {/* コネクタ線 */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={totalW}
+          height={totalH}
+          style={{ overflow: 'visible' }}
+        >
+          {mainMatches
+            .filter(m => m.round < maxRound)
+            .map(m => {
+              const cy = matchCenter(m.round, m.position);
+              const nextCy = matchCenter(m.round + 1, Math.floor(m.position / 2));
+              const x1 = colLeft(m.round) + MATCH_W;
+              const midX = x1 + COL_GAP / 2;
+              const x2 = colLeft(m.round + 1);
+              return (
+                <path
+                  key={m.id}
+                  d={`M ${x1} ${cy} H ${midX} V ${nextCy} H ${x2}`}
+                  fill="none"
+                  stroke="#D1D5DB"
+                  strokeWidth={1.5}
+                />
+              );
+            })}
+        </svg>
+
+        {/* 試合カード */}
+        {mainMatches.map(m => {
+          const cy  = matchCenter(m.round, m.position);
+          const top = cy - MATCH_H / 2;
+          const left = colLeft(m.round);
+          return (
+            <div key={m.id} className="absolute" style={{ left, top }}>
+              <DEMatchCard match={m} fname={fname} maxRound={maxRound} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 3位決定戦 */}
+      {thirdPlace && (
+        <div className="mt-5 pt-4 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-400 mb-2">3位決定戦</p>
+          <DEMatchCard match={thirdPlace} fname={fname} maxRound={maxRound} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── メインコンポーネント ───────────────────────────────────────────────
 type Tab = 'entry' | 'pools' | 'advancement' | 'bracket' | 'results';
 const ALL_TABS: Tab[] = ['entry', 'pools', 'advancement', 'bracket', 'results'];
@@ -292,20 +410,26 @@ export default function ViewerView() {
     : [];
 
   const maxRound = tournament.deMatches.filter(m => !m.isThirdPlace).reduce((mx, m) => Math.max(mx, m.round), 0);
-  const roundLabel = (r: number) => {
-    if (r === maxRound)     return '決勝';
-    if (r === maxRound - 1) return '準決勝';
-    if (r === maxRound - 2) return '準々決勝';
-    return `Round ${r}`;
-  };
 
-  // タブ: 通過判定・最終順位はプール戦完了後のみ表示
+  // 最終フェーズ完了判定
+  const hasDEPhase = tournament.deMatches.length > 0;
+  const allDEComplete = hasDEPhase &&
+    tournament.deMatches.filter(m => !m.isBye).every(m => m.winner !== null);
+  // 最終フェーズがDEならDE完了、プールのみならプール完了
+  const finalPhaseComplete = hasDEPhase ? allDEComplete : (hasPools && allPoolsComplete);
+
+  // DE最終順位計算 (最終フェーズがDE完了時のみ)
+  const finalRankings = (hasDEPhase && allDEComplete)
+    ? calcFinalRankings(tournament.deMatches, globalStats, tournament.dePhase.thirdPlace)
+    : null;
+
+  // タブ: 通過判定はプール完了後、最終順位は最終フェーズ完了後のみ
   const TABS = [
-    { key: 'entry' as Tab,       label: 'エントリー',        visible: true },
-    { key: 'pools' as Tab,       label: 'プール表',          visible: hasPools },
-    { key: 'advancement' as Tab, label: '通過判定',          visible: allPoolsComplete },
-    { key: 'bracket' as Tab,     label: 'トーナメント',      visible: tournament.deMatches.length > 0 || !hasPools },
-    { key: 'results' as Tab,     label: '最終順位',          visible: allPoolsComplete || (!hasPools && tournament.deMatches.length > 0) },
+    { key: 'entry' as Tab,       label: 'エントリー',   visible: true },
+    { key: 'pools' as Tab,       label: 'プール表',     visible: hasPools },
+    { key: 'advancement' as Tab, label: '通過判定',     visible: allPoolsComplete },
+    { key: 'bracket' as Tab,     label: 'トーナメント', visible: hasDEPhase || !hasPools },
+    { key: 'results' as Tab,     label: '最終順位',     visible: finalPhaseComplete },
   ].filter(t => t.visible);
 
   // エントリータブ: 所属でグループ化
@@ -734,42 +858,7 @@ export default function ViewerView() {
                 <p className="text-xs">プール戦完了後に管理画面で作成されます</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {[...tournament.deMatches]
-                  .filter(m => !m.isBye)
-                  .sort((a, b) => {
-                    if (a.isThirdPlace && !b.isThirdPlace) return 1;
-                    if (!a.isThirdPlace && b.isThirdPlace) return -1;
-                    if (a.round !== b.round) return a.round - b.round;
-                    return a.position - b.position;
-                  })
-                  .map(m => {
-                    const nameA = fname(m.fencerAId) || 'TBD';
-                    const nameB = fname(m.fencerBId) || 'TBD';
-                    const label = m.isThirdPlace ? '3位決定戦' : roundLabel(m.round);
-                    return (
-                      <div key={m.id} className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 flex flex-wrap items-center gap-3 shadow-sm">
-                        <span className="text-xs text-gray-400 w-20 shrink-0 font-medium">{label}</span>
-                        <div className="flex-1 flex flex-wrap items-center gap-2">
-                          <span className={`font-medium ${m.winner === 'A' ? 'text-blue-700' : 'text-gray-700'}`}>{nameA}</span>
-                          {m.winner ? (
-                            <span className="text-sm font-bold text-gray-600">
-                              {m.scoreA ?? '-'} : {m.scoreB ?? '-'}
-                            </span>
-                          ) : (
-                            <span className="text-gray-300 text-sm">vs</span>
-                          )}
-                          <span className={`font-medium ${m.winner === 'B' ? 'text-blue-700' : 'text-gray-700'}`}>{nameB}</span>
-                        </div>
-                        {m.winner && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                            {m.winner === 'A' ? nameA : nameB} 勝
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
+              <DEBracketView deMatches={tournament.deMatches} fname={fname} />
             )}
           </div>
         )}
@@ -778,11 +867,48 @@ export default function ViewerView() {
         {activeTab === 'results' && (
           <div>
             <h2 className="text-lg font-bold text-gray-800 mb-4">最終順位</h2>
-            {!hasPools && tournament.deMatches.length === 0 ? (
+            {!finalPhaseComplete ? (
               <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-400">
-                <p className="font-medium mb-1">大会がまだ完了していません</p>
+                <p className="font-medium mb-1">まだ確定していません</p>
+                <p className="text-xs">全試合が終了すると最終順位が表示されます</p>
+              </div>
+            ) : finalRankings ? (
+              /* DE結果ベースの最終順位 */
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-gray-600 bg-gray-50">
+                        <th className="px-3 py-2 text-center">順位</th>
+                        <th className="px-3 py-2 text-left">氏名</th>
+                        <th className="px-3 py-2 text-left hidden sm:table-cell">ふりがな</th>
+                        <th className="px-3 py-2 text-left">所属</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...finalRankings].sort((a, b) => a.finalRank - b.finalRank).map(r => {
+                        const f = tournament.fencers.find(x => x.id === r.fencerId);
+                        const bg = r.finalRank === 1 ? 'bg-yellow-50' : r.finalRank === 2 ? 'bg-gray-50' : r.finalRank === 3 ? 'bg-orange-50' : '';
+                        return (
+                          <tr key={r.fencerId} className={`border-b border-gray-50 ${bg}`}>
+                            <td className="px-3 py-2 text-center font-bold text-gray-700">{r.finalRank}</td>
+                            <td className="px-3 py-2 font-medium text-gray-800">
+                              {f ? `${f.lastName}${f.firstName}` : ''}
+                              {r.withdrawn && <span className="text-xs text-red-500 ml-1">棄権</span>}
+                            </td>
+                            <td className="px-3 py-2 text-gray-400 text-xs hidden sm:table-cell">
+                              {f ? `${f.lastNameKana}${f.firstNameKana}` : ''}
+                            </td>
+                            <td className="px-3 py-2 text-gray-500 text-xs">{f?.club}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
+              /* プール最終順位 (DEなし) */
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">

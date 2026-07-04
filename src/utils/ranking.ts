@@ -1,4 +1,4 @@
-import type { Pool, Fencer, FencerStats } from '../types';
+import type { Pool, Fencer, FencerStats, DEMatch } from '../types';
 
 export function calcPoolStats(pool: Pool, fencerIds: string[]): Map<string, Omit<FencerStats, 'globalRank' | 'advanced'>> {
   const withdrawn = pool.withdrawnFencerIds ?? [];
@@ -103,6 +103,81 @@ export function applyAdvancement(
     ...s,
     advanced: !s.withdrawn && s.globalRank <= count,
   }));
+}
+
+// DE結果に基づく最終順位計算
+export function calcFinalRankings(
+  deMatches: DEMatch[],
+  poolGlobalStats: FencerStats[],
+  hasThirdPlace: boolean,
+): Array<{ fencerId: string; finalRank: number; withdrawn?: boolean }> {
+  const mainMatches = deMatches.filter(m => !m.isBye && !m.isThirdPlace);
+  const thirdPlaceMatch = deMatches.find(m => m.isThirdPlace);
+
+  if (mainMatches.length === 0) return [];
+
+  const maxRound = mainMatches.reduce((mx, m) => Math.max(mx, m.round), 0);
+  const finalMatch = mainMatches.find(m => m.round === maxRound);
+  const results: Array<{ fencerId: string; finalRank: number; withdrawn?: boolean }> = [];
+  let nextRank = 1;
+
+  // 1位: 決勝勝者, 2位: 決勝敗者
+  if (finalMatch?.winner) {
+    const winnerId = finalMatch.winner === 'A' ? finalMatch.fencerAId : finalMatch.fencerBId;
+    const loserId  = finalMatch.winner === 'A' ? finalMatch.fencerBId : finalMatch.fencerAId;
+    if (winnerId) results.push({ fencerId: winnerId, finalRank: nextRank++ });
+    if (loserId)  results.push({ fencerId: loserId,  finalRank: nextRank++ });
+  }
+
+  // 3位/4位: 3位決定戦あり
+  if (hasThirdPlace && thirdPlaceMatch?.winner) {
+    const w = thirdPlaceMatch.winner === 'A' ? thirdPlaceMatch.fencerAId : thirdPlaceMatch.fencerBId;
+    const l = thirdPlaceMatch.winner === 'A' ? thirdPlaceMatch.fencerBId : thirdPlaceMatch.fencerAId;
+    if (w) results.push({ fencerId: w, finalRank: nextRank++ });
+    if (l) results.push({ fencerId: l, finalRank: nextRank++ });
+  } else if (!hasThirdPlace && maxRound >= 2) {
+    // 3位決定戦なし: 準決勝敗者2名が同3位
+    const sfLosers = mainMatches
+      .filter(m => m.round === maxRound - 1 && m.winner !== null)
+      .map(m => (m.winner === 'A' ? m.fencerBId : m.fencerAId))
+      .filter((id): id is string => id !== null);
+    _sortByPoolRank(sfLosers, poolGlobalStats).forEach(id =>
+      results.push({ fencerId: id, finalRank: nextRank }),
+    );
+    nextRank += sfLosers.length;
+  }
+
+  // それ以前のラウンドの敗者 (準々決勝以下)
+  for (let round = maxRound - 2; round >= 1; round--) {
+    const losers = mainMatches
+      .filter(m => m.round === round && m.winner !== null)
+      .map(m => (m.winner === 'A' ? m.fencerBId : m.fencerAId))
+      .filter((id): id is string => id !== null);
+    if (losers.length === 0) continue;
+    _sortByPoolRank(losers, poolGlobalStats).forEach(id =>
+      results.push({ fencerId: id, finalRank: nextRank++ }),
+    );
+  }
+
+  // 棄権選手は最下位
+  const ranked = new Set(results.map(r => r.fencerId));
+  poolGlobalStats
+    .filter(s => s.withdrawn && !ranked.has(s.fencerId))
+    .sort((a, b) => a.globalRank - b.globalRank)
+    .forEach(s => results.push({ fencerId: s.fencerId, finalRank: nextRank++, withdrawn: true }));
+
+  return results;
+}
+
+function _sortByPoolRank(fencerIds: string[], stats: FencerStats[]): string[] {
+  return [...fencerIds].sort((a, b) => {
+    const sA = stats.find(s => s.fencerId === a);
+    const sB = stats.find(s => s.fencerId === b);
+    if (!sA || !sB) return 0;
+    if (sB.vm !== sA.vm) return sB.vm - sA.vm;
+    if (sB.indicator !== sA.indicator) return sB.indicator - sA.indicator;
+    return sB.touchesScored - sA.touchesScored;
+  });
 }
 
 // FIE 推奨試合順序（プールサイズ別）
