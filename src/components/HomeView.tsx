@@ -195,7 +195,7 @@ function EventRow({ event }: { event: TournamentEvent }) {
 type StatusFilter = 'all' | '実施中' | '未' | '終了';
 
 export default function HomeView() {
-  const { events, user, signOut, hasLocalData, migrateFromLocalStorage, saveStatus } = useStore();
+  const { events, user, signOut, hasLocalData, migrateFromLocalStorage, saveStatus, saveErrorDetail, openMyPage } = useStore();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [activePage, setActivePage] = useState(0);
@@ -267,8 +267,14 @@ export default function HomeView() {
                 </button>
                 <button
                   className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg"
-                  onClick={signOut}
+                  onClick={openMyPage}
                   title={user.email}
+                >
+                  マイページ
+                </button>
+                <button
+                  className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg hidden sm:inline"
+                  onClick={signOut}
                 >
                   ログアウト
                 </button>
@@ -310,6 +316,14 @@ export default function HomeView() {
       </div>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
+        {/* 保存エラー詳細バナー */}
+        {saveStatus === 'error' && saveErrorDetail && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <p className="text-sm font-medium text-red-700">⚠ 保存に失敗しました</p>
+            <p className="text-xs text-red-600 mt-0.5">{saveErrorDetail}</p>
+          </div>
+        )}
+
         {/* localStorage 移行バナー */}
         {user && hasLocalData && (
           <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">

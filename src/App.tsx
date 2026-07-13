@@ -9,6 +9,7 @@ import AdvancementView from './components/AdvancementView';
 import BracketView from './components/BracketView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
+import MyPageView from './components/MyPageView';
 import ViewerView from './components/ViewerView';
 import type { AppPhase } from './types';
 
@@ -25,8 +26,8 @@ const PHASE_ORDER: AppPhase[] = ['entry', 'pool', 'advancement', 'bracket', 'res
 export default function App() {
   const {
     closeTournament, closeEvent, deleteEvent, logs, exportTournamentJSON, viewMode, setViewMode,
-    events, tournaments, user, isLoading, saveStatus, initializeStore, signOut, openTournament,
-    openEvent, editorEventIds,
+    events, tournaments, user, isLoading, saveStatus, saveErrorDetail, initializeStore, signOut, openTournament,
+    openEvent, editorEventIds, myPageOpen, openMyPage,
   } = useStore();
   const tournament = useTournament();
   const currentEventId = useStore(s => s.currentEventId);
@@ -57,6 +58,12 @@ export default function App() {
     if (isLoading) return;
     const hash = window.location.hash;
 
+    // マイページ: #/mypage
+    if (hash === '#/mypage') {
+      openMyPage();
+      return;
+    }
+
     // 新形式: #/t/{eventId}/c/{catId}
     const newFmt = hash.match(/^#\/t\/([^/?]+)\/c\/([^?]+)/);
     if (newFmt) {
@@ -84,11 +91,17 @@ export default function App() {
         openTournament(id);
       }
     }
-  }, [isLoading, openTournament, openEvent]);
+  }, [isLoading, openTournament, openEvent, openMyPage]);
 
   // ── 画面状態を URL ハッシュに同期 ───────────────────────────────────
   useEffect(() => {
     if (isLoading) return;
+    if (myPageOpen) {
+      if (window.location.hash !== '#/mypage') {
+        window.location.hash = '#/mypage';
+      }
+      return;
+    }
     if (currentId && tournament) {
       const evtId = tournament.eventId ?? currentEventId ?? '';
       const base = evtId ? `#/t/${evtId}/c/${tournament.id}` : `#/t/${tournament.id}`;
@@ -101,11 +114,11 @@ export default function App() {
         window.location.hash = expected;
       }
     } else {
-      if (window.location.hash.startsWith('#/t/')) {
+      if (window.location.hash.startsWith('#/t/') || window.location.hash === '#/mypage') {
         history.pushState('', document.title, window.location.pathname + window.location.search);
       }
     }
-  }, [currentId, currentEventId, tournament?.id, isLoading]);
+  }, [currentId, currentEventId, tournament?.id, isLoading, myPageOpen]);
 
   // ── ローディング ────────────────────────────────────────────────────
   if (isLoading) {
@@ -119,6 +132,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // ── マイページ ──────────────────────────────────────────────────────
+  if (myPageOpen) {
+    return <MyPageView />;
   }
 
   // ── ホーム画面 ──────────────────────────────────────────────────────
@@ -320,6 +338,12 @@ export default function App() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
+        {saveStatus === 'error' && saveErrorDetail && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 print:hidden">
+            <p className="text-sm font-medium text-red-700">⚠ 保存に失敗しました</p>
+            <p className="text-xs text-red-600 mt-0.5">{saveErrorDetail}</p>
+          </div>
+        )}
         {tournament.appPhase === 'entry'       && <EntryManager />}
         {tournament.appPhase === 'pool'        && <PoolView />}
         {tournament.appPhase === 'advancement' && <AdvancementView />}

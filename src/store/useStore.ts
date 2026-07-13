@@ -187,6 +187,7 @@ interface StoreState {
   user: User | null;
   isLoading: boolean;
   saveStatus: SaveStatus;
+  saveErrorDetail: string | null; // 保存失敗時の詳細（ユーザー向けメッセージ）
   hasLocalData: boolean;
 
   // ── データ ────────────────────────────────────────────────
@@ -211,7 +212,15 @@ interface StoreState {
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ error?: string }>;
+  deleteAccount: (password: string) => Promise<{ error?: string }>;
   migrateFromLocalStorage: () => Promise<void>;
+
+  // ── マイページ ────────────────────────────────────────────
+  myPageOpen: boolean;
+  suppressAuthReload: boolean; // 再認証（PW変更・アカウント削除）中はauthイベント起因の再ロードを抑止
+  openMyPage: () => void;
+  closeMyPage: () => void;
 
   // ── 共同編集アクション ────────────────────────────────────
   redeemCollabKey: (eventId: string, key: string) => Promise<{ ok: boolean; error?: string }>;
@@ -317,11 +326,22 @@ export const useStore = create<StoreState>()((set, get) => {
         data: { venue: event.venue, pin: event.pin, categoryIds: event.categoryIds, categories },
       }, { onConflict: 'id' });
       if (error) throw error;
-      set({ saveStatus: 'saved', lastUpdated: new Date() });
+      set({ saveStatus: 'saved', saveErrorDetail: null, lastUpdated: new Date() });
       setTimeout(() => { if (get().saveStatus === 'saved') set({ saveStatus: 'idle' }); }, 2500);
     } catch (err) {
       console.error('[FencingDraw] Save failed:', err);
-      set({ saveStatus: 'error' });
+      const e = err as { code?: string; message?: string; status?: number };
+      const msg = e?.message ?? '';
+      let detail = `保存エラー: ${msg || '不明なエラー'}`;
+      if (e?.code === '23503' || /foreign key/i.test(msg)) {
+        // owner_id が auth.users に存在しない = 削除済みアカウントのセッションが残っている
+        detail = 'このアカウントは既に削除されています。ログアウトして、再度アカウント登録またはログインしてください。';
+      } else if (e?.status === 401 || e?.code === 'PGRST301' || /JWT|expired/i.test(msg)) {
+        detail = 'ログインセッションの有効期限が切れました。ログアウトして再ログインしてください。';
+      } else if (e?.code === '42501' || /row-level security/i.test(msg)) {
+        detail = 'この大会を保存する権限がありません（所有者または編集キー認証済みユーザーのみ保存できます）。';
+      }
+      set({ saveStatus: 'error', saveErrorDetail: detail });
     } finally {
       setTimeout(() => { selfSaving = false; }, 3000);
     }
@@ -352,6 +372,7 @@ export const useStore = create<StoreState>()((set, get) => {
     user: null,
     isLoading: true,
     saveStatus: 'idle',
+    saveErrorDetail: null,
     hasLocalData,
     events: [],
     tournaments: [],
@@ -363,9 +384,12 @@ export const useStore = create<StoreState>()((set, get) => {
     conflictWarning: false,
     editorEventIds: [],
     collabEnabledMap: {},
+    myPageOpen: false,
+    suppressAuthReload: false,
 
     // ── Auth ────────────────────────────────────────────────
     initializeStore: async () => {
+      if (get().suppressAuthReload) return;
       set({ isLoading: true });
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -468,8 +492,64 @@ export const useStore = create<StoreState>()((set, get) => {
 
     signOut: async () => {
       await supabase.auth.signOut();
-      set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer', editorEventIds: [], collabEnabledMap: {} });
+      set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer', editorEventIds: [], collabEnabledMap: {}, myPageOpen: false });
     },
+
+    changePassword: async (currentPassword, newPassword) => {
+      const { user } = get();
+      if (!user?.email) return { error: 'ログインしていません' };
+      set({ suppressAuthReload: true });
+      try {
+        // 現在のパスワードで再認証してから変更する
+        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+        if (authErr) return { error: '現在のパスワードが正しくありません' };
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+          if (error.message.includes('different from the old')) return { error: '新しいパスワードが現在のパスワードと同じです' };
+          return { error: 'パスワードの変更に失敗しました' };
+        }
+        return {};
+      } finally {
+        set({ suppressAuthReload: false });
+      }
+    },
+
+    deleteAccount: async (password) => {
+      const { user } = get();
+      if (!user?.email) return { error: 'ログインしていません' };
+      set({ suppressAuthReload: true });
+      try {
+        // パスワード再認証（本人確認）
+        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password });
+        if (authErr) return { error: 'パスワードが正しくありません' };
+        // サーバー側で「管理する大会の全削除 → アカウント削除」を1トランザクションで実行
+        const { error } = await supabase.rpc('delete_own_account');
+        if (error) {
+          console.error('[FencingDraw] Account deletion failed:', error);
+          return { error: '削除に失敗しました。時間をおいて再度お試しください。' };
+        }
+        const deletedUserId = user.id;
+        // ユーザーは既に存在しないため、ローカルセッションのみ破棄する
+        await supabase.auth.signOut({ scope: 'local' });
+        // ローカル状態から自分が管理していた大会を除去
+        set(s => {
+          const ownedIds = new Set(s.events.filter(e => e.ownerId === deletedUserId).map(e => e.id));
+          const ownedCatIds = new Set(s.events.filter(e => ownedIds.has(e.id)).flatMap(e => e.categoryIds));
+          return {
+            user: null, currentId: null, currentEventId: null, viewMode: 'viewer',
+            editorEventIds: [], collabEnabledMap: {},
+            events: s.events.filter(e => !ownedIds.has(e.id)),
+            tournaments: s.tournaments.filter(t => !ownedCatIds.has(t.id)),
+          };
+        });
+        return {};
+      } finally {
+        set({ suppressAuthReload: false });
+      }
+    },
+
+    openMyPage: () => set({ myPageOpen: true }),
+    closeMyPage: () => set({ myPageOpen: false }),
 
     redeemCollabKey: async (eventId, key) => {
       const { data, error } = await supabase.rpc('redeem_collab_key', {
