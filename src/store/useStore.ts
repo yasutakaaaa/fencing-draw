@@ -197,6 +197,10 @@ interface StoreState {
   viewMode: ViewMode;
   logs: TournamentLog[];
 
+  // ── 共同編集 ──────────────────────────────────────────────
+  editorEventIds: string[];             // 自分が編集キーで認証済みの大会ID
+  collabEnabledMap: Record<string, boolean>; // 自分がオーナーの大会の「共同編集ON」状態
+
   // ── Realtime / 同時編集 ────────────────────────────────────
   lastUpdated: Date | null;
   conflictWarning: boolean;
@@ -208,6 +212,10 @@ interface StoreState {
   signUp: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   migrateFromLocalStorage: () => Promise<void>;
+
+  // ── 共同編集アクション ────────────────────────────────────
+  redeemCollabKey: (eventId: string, key: string) => Promise<{ ok: boolean; error?: string }>;
+  setCollabSettings: (eventId: string, enabled: boolean, key?: string) => Promise<{ ok: boolean; error?: string }>;
 
   // ── イベント管理 ────────────────────────────────────────────
   createEvent: (data: Omit<TournamentEvent, 'id' | 'categoryIds' | 'ownerId'>) => string;
@@ -300,7 +308,9 @@ export const useStore = create<StoreState>()((set, get) => {
     try {
       const { error } = await supabase.from('tournaments').upsert({
         id: event.id,
-        owner_id: user.id,
+        // 既存イベントは元のオーナーを保持する（共同編集者が保存してもオーナーを書き換えない）。
+        // 新規イベントは createEvent 時点で ownerId = 作成者 が入っている。
+        owner_id: event.ownerId ?? user.id,
         name: event.name,
         date: event.date || null,
         status: event.status,
@@ -351,6 +361,8 @@ export const useStore = create<StoreState>()((set, get) => {
     logs: [],
     lastUpdated: null,
     conflictWarning: false,
+    editorEventIds: [],
+    collabEnabledMap: {},
 
     // ── Auth ────────────────────────────────────────────────
     initializeStore: async () => {
@@ -363,6 +375,20 @@ export const useStore = create<StoreState>()((set, get) => {
           .order('created_at', { ascending: false });
         if (error) throw error;
         const { events, tournaments } = parseSupabaseRows(rows ?? []);
+
+        let editorEventIds: string[] = [];
+        let collabEnabledMap: Record<string, boolean> = {};
+        if (session?.user) {
+          const [editorsRes, collabRes] = await Promise.all([
+            supabase.from('tournament_editors').select('tournament_id').eq('user_id', session.user.id),
+            supabase.from('collab_keys').select('tournament_id, enabled'),
+          ]);
+          editorEventIds = (editorsRes.data ?? []).map(r => r.tournament_id as string);
+          collabEnabledMap = Object.fromEntries(
+            (collabRes.data ?? []).map(r => [r.tournament_id as string, !!r.enabled])
+          );
+        }
+
         set({
           user: session?.user ?? null,
           events,
@@ -370,6 +396,8 @@ export const useStore = create<StoreState>()((set, get) => {
           isLoading: false,
           lastUpdated: new Date(),
           hasLocalData: !!localStorage.getItem(LS_KEY),
+          editorEventIds,
+          collabEnabledMap,
         });
 
         // ── Supabase Realtime 購読 ──────────────────────────
@@ -440,7 +468,36 @@ export const useStore = create<StoreState>()((set, get) => {
 
     signOut: async () => {
       await supabase.auth.signOut();
-      set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer' });
+      set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer', editorEventIds: [], collabEnabledMap: {} });
+    },
+
+    redeemCollabKey: async (eventId, key) => {
+      const { data, error } = await supabase.rpc('redeem_collab_key', {
+        p_tournament_id: eventId,
+        p_key: key,
+      });
+      if (error) {
+        const msg = error.message.includes('too many attempts')
+          ? '試行回数が上限に達しました。しばらくしてから再度お試しください。'
+          : 'エラーが発生しました。';
+        return { ok: false, error: msg };
+      }
+      if (data === true) {
+        set(s => ({ editorEventIds: s.editorEventIds.includes(eventId) ? s.editorEventIds : [...s.editorEventIds, eventId] }));
+        return { ok: true };
+      }
+      return { ok: false, error: 'キーが正しくないか、共同編集が許可されていません。' };
+    },
+
+    setCollabSettings: async (eventId, enabled, key) => {
+      const { error } = await supabase.rpc('set_collab_key', {
+        p_tournament_id: eventId,
+        p_enabled: enabled,
+        p_key: enabled ? (key ?? null) : null,
+      });
+      if (error) return { ok: false, error: 'エラーが発生しました。' };
+      set(s => ({ collabEnabledMap: { ...s.collabEnabledMap, [eventId]: enabled } }));
+      return { ok: true };
     },
 
     migrateFromLocalStorage: async () => {

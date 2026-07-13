@@ -312,7 +312,7 @@ function readTabFromHash(): Tab | null {
 }
 
 export default function ViewerView() {
-  const { setViewMode, closeTournament, closeEvent, openTournament, events, tournaments, user, lastUpdated, conflictWarning, dismissConflict } = useStore();
+  const { setViewMode, closeTournament, closeEvent, openTournament, events, tournaments, user, lastUpdated, conflictWarning, dismissConflict, editorEventIds } = useStore();
   const currentEventId = useStore(s => s.currentEventId);
   const tournament = useTournament();
   const [query, setQuery] = useState('');
@@ -325,7 +325,9 @@ export default function ViewerView() {
 
   const eventId = tournament.eventId ?? currentEventId ?? '';
   const event = events.find(e => e.id === eventId);
-  const isOwner = !!user && (user.id === event?.ownerId || !event?.ownerId);
+  const isOwner = !!user && user.id === event?.ownerId;
+  const isEditor = editorEventIds.includes(eventId);
+  const canEdit = isOwner || isEditor;
   const eventName = event?.name ?? tournament.name;
   const catLabel = tournament.name || categoryLabel(tournament);
 
@@ -338,8 +340,8 @@ export default function ViewerView() {
     : [];
 
   const handleEditClick = () => {
-    if (isOwner) setViewMode('admin');
-    else setShowLogin(true);
+    if (canEdit) setViewMode('admin');
+    else if (!user) setShowLogin(true);
   };
 
   // タブ変化を URL ハッシュに同期
@@ -519,18 +521,20 @@ export default function ViewerView() {
                 onClick={() => window.print()}
                 title="印刷（プール表・トーナメント）"
               >🖨 印刷</button>
-              {/* 編集ボタン */}
-              <button
-                className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
-                  isOwner
-                    ? 'border-blue-400 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600'
-                    : 'border-slate-500 text-slate-400 hover:text-slate-200'
-                }`}
-                onClick={handleEditClick}
-                title={isOwner ? '管理モードへ切替' : 'ログインして編集'}
-              >
-                {isOwner ? '✎ 編集' : '🔑 編集'}
-              </button>
+              {/* 編集ボタン: オーナー・編集者または未ログインにのみ表示 */}
+              {(canEdit || !user) && (
+                <button
+                  className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
+                    canEdit
+                      ? 'border-blue-400 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600'
+                      : 'border-slate-500 text-slate-400 hover:text-slate-200'
+                  }`}
+                  onClick={handleEditClick}
+                  title={canEdit ? '管理モードへ切替' : 'ログインして編集'}
+                >
+                  {canEdit ? '✎ 編集' : '🔑 編集'}
+                </button>
+              )}
             </div>
           </div>
 

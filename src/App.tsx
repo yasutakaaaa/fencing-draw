@@ -26,7 +26,7 @@ export default function App() {
   const {
     closeTournament, closeEvent, deleteEvent, logs, exportTournamentJSON, viewMode, setViewMode,
     events, tournaments, user, isLoading, saveStatus, initializeStore, signOut, openTournament,
-    openEvent,
+    openEvent, editorEventIds,
   } = useStore();
   const tournament = useTournament();
   const currentEventId = useStore(s => s.currentEventId);
@@ -141,8 +141,10 @@ export default function App() {
 
   const eventId = tournament.eventId ?? '';
   const event = events.find(e => e.id === eventId);
-  const isOwner = !!user && (user.id === event?.ownerId || !event?.ownerId);
-  if (!isOwner) {
+  const isOwner = !!user && user.id === event?.ownerId;
+  const isEditor = editorEventIds.includes(eventId);
+  const canEdit = isOwner || isEditor;
+  if (!canEdit) {
     setViewMode('viewer');
     return <ViewerView />;
   }
@@ -249,12 +251,14 @@ export default function App() {
                   >
                     ＋ カテゴリ
                   </button>
-                  <button
-                    className="text-xs px-2 py-1 rounded border border-red-500 text-red-300 hover:text-red-200 transition-colors hidden sm:inline"
-                    onClick={handleDeleteEvent}
-                  >
-                    削除
-                  </button>
+                  {isOwner && (
+                    <button
+                      className="text-xs px-2 py-1 rounded border border-red-500 text-red-300 hover:text-red-200 transition-colors hidden sm:inline"
+                      onClick={handleDeleteEvent}
+                    >
+                      削除
+                    </button>
+                  )}
                 </>
               )}
 
