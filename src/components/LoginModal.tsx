@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
+import CaptchaWidget from './CaptchaWidget';
+import { isCaptchaConfigured } from '../lib/captcha';
 
 type Mode = 'signin' | 'signup';
 
@@ -11,15 +13,25 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+
+  const resetCaptcha = () => {
+    setCaptchaToken(null);
+    setCaptchaResetKey(value => value + 1);
+  };
 
   const handleSubmit = async () => {
     if (!email.trim() || !password) { setError('メールとパスワードを入力してください'); return; }
     if (password.length < 6) { setError('パスワードは6文字以上です'); return; }
+    if (!captchaToken) { setError('ボット対策の確認を完了してください'); return; }
     setLoading(true);
     setError('');
-    const result = mode === 'signin' ? await signIn(email, password) : await signUp(email, password);
+    const result = mode === 'signin'
+      ? await signIn(email, password, captchaToken)
+      : await signUp(email, password, captchaToken);
     setLoading(false);
-    if (result.error) { setError(result.error); return; }
+    if (result.error) { setError(result.error); resetCaptcha(); return; }
     if (mode === 'signup') { setDone(true); return; }
     onClose();
   };
@@ -73,24 +85,25 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
               onKeyDown={e => e.key === 'Enter' && handleSubmit()}
             />
           </div>
+          <CaptchaWidget onTokenChange={setCaptchaToken} resetKey={captchaResetKey} />
           {error && <p className="text-red-500 text-xs">{error}</p>}
         </div>
 
         <button
           className="mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-bold transition-colors"
           onClick={handleSubmit}
-          disabled={loading}
+          disabled={loading || !captchaToken || !isCaptchaConfigured}
         >
           {loading ? '処理中…' : mode === 'signin' ? 'ログイン' : '登録する'}
         </button>
 
         <div className="mt-3 text-center">
           {mode === 'signin' ? (
-            <button className="text-xs text-blue-500 hover:underline" onClick={() => { setMode('signup'); setError(''); }}>
+            <button className="text-xs text-blue-500 hover:underline" onClick={() => { setMode('signup'); setError(''); resetCaptcha(); }}>
               アカウントを新規作成
             </button>
           ) : (
-            <button className="text-xs text-blue-500 hover:underline" onClick={() => { setMode('signin'); setError(''); }}>
+            <button className="text-xs text-blue-500 hover:underline" onClick={() => { setMode('signin'); setError(''); resetCaptcha(); }}>
               すでにアカウントをお持ちの方
             </button>
           )}

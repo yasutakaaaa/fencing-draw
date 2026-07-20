@@ -335,7 +335,7 @@ export default function EntryManager() {
     const reader = new FileReader();
     reader.onload = ev => {
       const raw = (ev.target?.result as string) ?? '';
-      const text = raw.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const text = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       const rows = parseCSV(text);
       const parsed: Omit<Fencer, 'id'>[] = [];
       for (const cols of rows) {

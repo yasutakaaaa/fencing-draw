@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { TournamentEvent, EventStatus } from '../types';
+import Footer from './Footer';
+import CaptchaWidget from './CaptchaWidget';
+import { isCaptchaConfigured } from '../lib/captcha';
 
 const STATUS_STYLE: Record<EventStatus, string> = {
   '未':    'bg-gray-100 text-gray-500',
@@ -49,18 +52,29 @@ function PasswordChangeForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
-  const reset = () => { setCurrent(''); setNext(''); setConfirm(''); setError(''); };
+  const reset = () => {
+    setCurrent(''); setNext(''); setConfirm(''); setError(''); setCaptchaToken(null);
+    setCaptchaResetKey(value => value + 1);
+  };
 
   const handleSubmit = async () => {
     if (!current || !next) { setError('すべての項目を入力してください'); return; }
     if (next.length < 6) { setError('新しいパスワードは6文字以上です'); return; }
     if (next !== confirm) { setError('新しいパスワードが一致しません'); return; }
+    if (!captchaToken) { setError('ボット対策の確認を完了してください'); return; }
     setLoading(true);
     setError('');
-    const result = await changePassword(current, next);
+    const result = await changePassword(current, next, captchaToken);
     setLoading(false);
-    if (result.error) { setError(result.error); return; }
+    if (result.error) {
+      setError(result.error);
+      setCaptchaToken(null);
+      setCaptchaResetKey(value => value + 1);
+      return;
+    }
     reset();
     setOpen(false);
     setSuccess(true);
@@ -99,12 +113,13 @@ function PasswordChangeForm() {
           value={confirm} onChange={e => { setConfirm(e.target.value); setError(''); }}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
       </div>
+      <CaptchaWidget onTokenChange={setCaptchaToken} resetKey={captchaResetKey} />
       {error && <p className="text-red-500 text-xs">{error}</p>}
       <div className="flex gap-2">
         <button className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-600 hover:bg-white"
           onClick={() => { reset(); setOpen(false); }} disabled={loading}>キャンセル</button>
         <button className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-bold transition-colors"
-          onClick={handleSubmit} disabled={loading}>{loading ? '変更中…' : '変更する'}</button>
+          onClick={handleSubmit} disabled={loading || !captchaToken || !isCaptchaConfigured}>{loading ? '変更中…' : '変更する'}</button>
       </div>
     </div>
   );
@@ -117,14 +132,22 @@ function DeleteAccountSection({ ownedEvents, onDeleted }: { ownedEvents: Tournam
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   const handleDelete = async () => {
     if (!password) return;
+    if (!captchaToken) { setError('ボット対策の確認を完了してください'); return; }
     setLoading(true);
     setError('');
-    const result = await deleteAccount(password);
+    const result = await deleteAccount(password, captchaToken);
     setLoading(false);
-    if (result.error) { setError(result.error); return; }
+    if (result.error) {
+      setError(result.error);
+      setCaptchaToken(null);
+      setCaptchaResetKey(value => value + 1);
+      return;
+    }
     onDeleted();
   };
 
@@ -176,11 +199,12 @@ function DeleteAccountSection({ ownedEvents, onDeleted }: { ownedEvents: Tournam
                 onChange={e => { setPassword(e.target.value); setError(''); }}
               />
             </div>
+            <CaptchaWidget onTokenChange={setCaptchaToken} resetKey={captchaResetKey} />
             {error && <p className="text-red-600 text-xs font-medium">{error}</p>}
             <div className="flex gap-2 max-w-xs">
               <button
                 className="flex-1 border border-gray-300 bg-white rounded-lg py-2 text-sm text-gray-600 hover:bg-gray-50"
-                onClick={() => { setOpen(false); setPassword(''); setError(''); }}
+                onClick={() => { setOpen(false); setPassword(''); setError(''); setCaptchaToken(null); setCaptchaResetKey(value => value + 1); }}
                 disabled={loading}
               >
                 キャンセル
@@ -188,7 +212,7 @@ function DeleteAccountSection({ ownedEvents, onDeleted }: { ownedEvents: Tournam
               <button
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white rounded-lg py-2 text-sm font-bold transition-colors"
                 onClick={handleDelete}
-                disabled={loading || !password}
+                disabled={loading || !password || !captchaToken || !isCaptchaConfigured}
               >
                 {loading ? '削除中…' : '完全に削除する'}
               </button>
@@ -214,9 +238,9 @@ export default function MyPageView() {
     [events, editorEventIds, user],
   );
 
-  // 未ログイン（かつ削除完了画面でない）なら閉じる
+  // 未ログインまたは匿名セッション（かつ削除完了画面でない）なら閉じる
   useEffect(() => {
-    if (!user && !deleted) closeMyPage();
+    if ((!user || user.is_anonymous) && !deleted) closeMyPage();
   }, [user, deleted, closeMyPage]);
 
   // ── 削除完了画面 ────────────────────────────────────────────────────
@@ -241,7 +265,7 @@ export default function MyPageView() {
     );
   }
 
-  if (!user) return null;
+  if (!user || user.is_anonymous) return null;
 
   const handleOpenEvent = (id: string) => {
     closeMyPage();
@@ -319,6 +343,8 @@ export default function MyPageView() {
         {/* ── アカウント削除 ── */}
         <DeleteAccountSection ownedEvents={ownedEvents} onDeleted={() => setDeleted(true)} />
       </main>
+
+      <Footer />
     </div>
   );
 }

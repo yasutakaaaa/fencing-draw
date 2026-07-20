@@ -8,9 +8,12 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "npm run lint && npm run test && npm run build",
+    "e2e": "playwright test"
   },
   "dependencies": {
+    "@marsidev/react-turnstile": "1.5.3",
     "@supabase/supabase-js": "^2.108.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

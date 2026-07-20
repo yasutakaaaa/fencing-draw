@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore, categoryLabel } from '../store/useStore';
 import type { TournamentEvent, EventStatus, Weapon, Gender, AgeCategory, TournamentFormat } from '../types';
+import Footer from './Footer';
 
 const STATUS_STYLE: Record<string, string> = {
   '準備中': 'bg-gray-100 text-gray-500',
@@ -173,7 +174,7 @@ function EditEventModal({ event, isOwner, onClose }: { event: TournamentEvent; i
                   value={collabKey}
                   onChange={e => setCollabKey(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 />
-                <p className="text-xs text-gray-400 mt-1">このキーを知っている人だけが、ログインした上でこの大会を編集できます。</p>
+                <p className="text-xs text-gray-400 mt-1">このキーを知っている人は、アカウント登録なしでこの大会の結果を編集できます（審判・記録係向け）。</p>
               </div>
             )}
             {collabError && <p className="text-xs text-red-500 mt-2">{collabError}</p>}
@@ -292,7 +293,7 @@ export default function TournamentPage() {
                   編集者として参加中
                 </span>
               )}
-              {user && !canEdit && (
+              {!canEdit && (
                 <div className="relative">
                   <button
                     className="text-xs px-3 py-1.5 rounded border border-yellow-400 text-yellow-200 hover:text-white transition-colors"
@@ -408,6 +409,8 @@ export default function TournamentPage() {
           </div>
         )}
       </main>
+
+      <Footer />
 
       {showAddCategory && (
         <AddCategoryModal eventId={event.id} onClose={() => setShowAddCategory(false)} />

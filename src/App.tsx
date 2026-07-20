@@ -10,7 +10,9 @@ import BracketView from './components/BracketView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
 import MyPageView from './components/MyPageView';
+import PrivacyPolicyView from './components/PrivacyPolicyView';
 import ViewerView from './components/ViewerView';
+import Footer from './components/Footer';
 import type { AppPhase } from './types';
 
 const STEPS: { phase: AppPhase; label: string }[] = [
@@ -27,9 +29,11 @@ export default function App() {
   const {
     closeTournament, closeEvent, deleteEvent, logs, exportTournamentJSON, viewMode, setViewMode,
     events, tournaments, user, isLoading, saveStatus, saveErrorDetail, initializeStore, signOut, openTournament,
-    openEvent, editorEventIds, myPageOpen, openMyPage,
+    openEvent, editorEventIds, myPageOpen, openMyPage, privacyOpen, openPrivacy,
   } = useStore();
   const tournament = useTournament();
+  const tournamentId = tournament?.id;
+  const tournamentEventId = tournament?.eventId;
   const currentEventId = useStore(s => s.currentEventId);
   const currentId = useStore(s => s.currentId);
   const [showHistory, setShowHistory] = useState(false);
@@ -64,6 +68,12 @@ export default function App() {
       return;
     }
 
+    // プライバシーポリシー: #/privacy
+    if (hash === '#/privacy') {
+      openPrivacy();
+      return;
+    }
+
     // 新形式: #/t/{eventId}/c/{catId}
     const newFmt = hash.match(/^#\/t\/([^/?]+)\/c\/([^?]+)/);
     if (newFmt) {
@@ -91,20 +101,26 @@ export default function App() {
         openTournament(id);
       }
     }
-  }, [isLoading, openTournament, openEvent, openMyPage]);
+  }, [isLoading, openTournament, openEvent, openMyPage, openPrivacy]);
 
   // ── 画面状態を URL ハッシュに同期 ───────────────────────────────────
   useEffect(() => {
     if (isLoading) return;
+    if (privacyOpen) {
+      if (window.location.hash !== '#/privacy') {
+        window.location.hash = '#/privacy';
+      }
+      return;
+    }
     if (myPageOpen) {
       if (window.location.hash !== '#/mypage') {
         window.location.hash = '#/mypage';
       }
       return;
     }
-    if (currentId && tournament) {
-      const evtId = tournament.eventId ?? currentEventId ?? '';
-      const base = evtId ? `#/t/${evtId}/c/${tournament.id}` : `#/t/${tournament.id}`;
+    if (currentId && tournamentId) {
+      const evtId = tournamentEventId ?? currentEventId ?? '';
+      const base = evtId ? `#/t/${evtId}/c/${tournamentId}` : `#/t/${tournamentId}`;
       if (!window.location.hash.startsWith(base.split('?')[0])) {
         window.location.hash = `${base}?tab=entry`;
       }
@@ -114,11 +130,11 @@ export default function App() {
         window.location.hash = expected;
       }
     } else {
-      if (window.location.hash.startsWith('#/t/') || window.location.hash === '#/mypage') {
+      if (window.location.hash.startsWith('#/t/') || window.location.hash === '#/mypage' || window.location.hash === '#/privacy') {
         history.pushState('', document.title, window.location.pathname + window.location.search);
       }
     }
-  }, [currentId, currentEventId, tournament?.id, isLoading, myPageOpen]);
+  }, [currentId, currentEventId, tournamentId, tournamentEventId, isLoading, myPageOpen, privacyOpen]);
 
   // ── ローディング ────────────────────────────────────────────────────
   if (isLoading) {
@@ -132,6 +148,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // ── プライバシーポリシー ────────────────────────────────────────────
+  if (privacyOpen) {
+    return <PrivacyPolicyView />;
   }
 
   // ── マイページ ──────────────────────────────────────────────────────
@@ -303,7 +324,7 @@ export default function App() {
               >
                 JSON
               </button>
-              {user && (
+              {user && !user.is_anonymous && (
                 <button
                   className="text-blue-200 hover:text-white text-xs border border-blue-500 hover:border-blue-300 px-2.5 py-1 rounded-lg transition-colors hidden sm:inline"
                   onClick={signOut}
@@ -350,6 +371,8 @@ export default function App() {
         {tournament.appPhase === 'bracket'     && <BracketView />}
         {tournament.appPhase === 'results'     && <ResultsView />}
       </main>
+
+      <Footer />
 
       {showHistory && <HistoryView onClose={() => setShowHistory(false)} />}
       {showAddCategory && event && (

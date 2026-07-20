@@ -61,7 +61,8 @@ export function calcPoolStats(pool: Pool, fencerIds: string[]): Map<string, Omit
   return result;
 }
 
-export function calcGlobalStats(pools: Pool[], _fencers: Fencer[]): FencerStats[] {
+export function calcGlobalStats(pools: Pool[], fencers: Fencer[]): FencerStats[] {
+  void fencers; // API互換のため保持（将来、同順位のシード処理で使用予定）
   const allStats: Array<Omit<FencerStats, 'globalRank' | 'advanced'>> = [];
 
   for (const pool of pools) {

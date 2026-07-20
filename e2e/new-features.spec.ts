@@ -38,7 +38,6 @@ test('F02 - 【未開催】大会のステータスバッジ確認', async ({ pa
   const row = page.locator('text=【未開催】春季大会').first();
   await expect(row).toBeVisible({ timeout: 8000 });
   // 親の行の中に「未」バッジがあること
-  const eventRow = row.locator('xpath=ancestor::div[contains(@class,"border")]').first();
   // 行を展開してカテゴリ確認
   await row.click();
   await page.waitForTimeout(400);

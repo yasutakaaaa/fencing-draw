@@ -51,10 +51,7 @@ function defaultTournament(id?: string): Tournament {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migrateTournament(raw: any): Tournament {
   if (Array.isArray(raw.phases)) {
-    const fencers = (raw.fencers ?? []).map((f: any) => {
-      const { note: _n, ...rest } = f;
-      return rest as Fencer;
-    });
+    const fencers = (raw.fencers ?? []).map(stripLegacyFencer);
     return {
       ...raw,
       fencers,
@@ -113,7 +110,7 @@ function migrateTournament(raw: any): Tournament {
   else if (raw.appPhase === 'bracket') { activePhaseIdx = phases.findIndex(p => p.type === 'de'); if (activePhaseIdx === -1) activePhaseIdx = 0; }
   else if (raw.appPhase === 'results') activePhaseIdx = phases.length;
 
-  const fencers = (raw.fencers ?? []).map((f: any) => { const { note: _n, ...rest } = f; return rest as Fencer; });
+  const fencers = (raw.fencers ?? []).map(stripLegacyFencer);
 
   return {
     id: raw.id ?? generateId(), name: raw.name ?? '',
@@ -123,6 +120,12 @@ function migrateTournament(raw: any): Tournament {
     format: raw.format ?? '個人',
     status: raw.status ?? '準備中', fencers, phases, phaseRuntimes, activePhaseIdx,
   };
+}
+
+function stripLegacyFencer(raw: unknown): Fencer {
+  const fencer = { ...(raw as Fencer & { note?: unknown }) };
+  delete fencer.note;
+  return fencer;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -209,21 +212,26 @@ interface StoreState {
 
   // ── Auth アクション ────────────────────────────────────────
   initializeStore: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string, captchaToken: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, captchaToken: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<{ error?: string }>;
-  deleteAccount: (password: string) => Promise<{ error?: string }>;
+  changePassword: (currentPassword: string, newPassword: string, captchaToken: string) => Promise<{ error?: string }>;
+  deleteAccount: (password: string, captchaToken: string) => Promise<{ error?: string }>;
   migrateFromLocalStorage: () => Promise<void>;
 
   // ── マイページ ────────────────────────────────────────────
   myPageOpen: boolean;
-  suppressAuthReload: boolean; // 再認証（PW変更・アカウント削除）中はauthイベント起因の再ロードを抑止
+  suppressAuthReload: boolean; // 再認証（PW変更・アカウント削除・匿名認証）中はauthイベント起因の再ロードを抑止
   openMyPage: () => void;
   closeMyPage: () => void;
 
+  // ── プライバシーポリシー ──────────────────────────────────
+  privacyOpen: boolean;
+  openPrivacy: () => void;
+  closePrivacy: () => void;
+
   // ── 共同編集アクション ────────────────────────────────────
-  redeemCollabKey: (eventId: string, key: string) => Promise<{ ok: boolean; error?: string }>;
+  redeemCollabKey: (eventId: string, key: string, captchaToken?: string) => Promise<{ ok: boolean; error?: string }>;
   setCollabSettings: (eventId: string, enabled: boolean, key?: string) => Promise<{ ok: boolean; error?: string }>;
 
   // ── イベント管理 ────────────────────────────────────────────
@@ -299,6 +307,7 @@ export const useStore = create<StoreState>()((set, get) => {
   const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // 自分が起動した保存を Realtime ループから区別するフラグ
   let selfSaving = false;
+  let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
   async function saveEvent(eventId: string) {
     const { events, tournaments, user } = get();
@@ -386,6 +395,7 @@ export const useStore = create<StoreState>()((set, get) => {
     collabEnabledMap: {},
     myPageOpen: false,
     suppressAuthReload: false,
+    privacyOpen: false,
 
     // ── Auth ────────────────────────────────────────────────
     initializeStore: async () => {
@@ -425,7 +435,12 @@ export const useStore = create<StoreState>()((set, get) => {
         });
 
         // ── Supabase Realtime 購読 ──────────────────────────
-        supabase
+        // Auth変更などで再初期化する際は、同名チャンネルへ購読後に
+        // コールバックを追加しないよう、古い購読を先に破棄する。
+        if (realtimeChannel) {
+          await supabase.removeChannel(realtimeChannel);
+        }
+        realtimeChannel = supabase
           .channel('fencing-draw-realtime')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, (payload) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -475,16 +490,16 @@ export const useStore = create<StoreState>()((set, get) => {
 
     dismissConflict: () => set({ conflictWarning: false }),
 
-    signIn: async (email, password) => {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    signIn: async (email, password, captchaToken) => {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
       if (error) return { error: error.message };
       set({ user: data.user });
       await get().initializeStore();
       return {};
     },
 
-    signUp: async (email, password) => {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+    signUp: async (email, password, captchaToken) => {
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { captchaToken } });
       if (error) return { error: error.message };
       set({ user: data.user ?? null });
       return {};
@@ -495,13 +510,13 @@ export const useStore = create<StoreState>()((set, get) => {
       set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer', editorEventIds: [], collabEnabledMap: {}, myPageOpen: false });
     },
 
-    changePassword: async (currentPassword, newPassword) => {
+    changePassword: async (currentPassword, newPassword, captchaToken) => {
       const { user } = get();
       if (!user?.email) return { error: 'ログインしていません' };
       set({ suppressAuthReload: true });
       try {
         // 現在のパスワードで再認証してから変更する
-        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword, options: { captchaToken } });
         if (authErr) return { error: '現在のパスワードが正しくありません' };
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) {
@@ -514,13 +529,13 @@ export const useStore = create<StoreState>()((set, get) => {
       }
     },
 
-    deleteAccount: async (password) => {
+    deleteAccount: async (password, captchaToken) => {
       const { user } = get();
       if (!user?.email) return { error: 'ログインしていません' };
       set({ suppressAuthReload: true });
       try {
         // パスワード再認証（本人確認）
-        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password });
+        const { error: authErr } = await supabase.auth.signInWithPassword({ email: user.email, password, options: { captchaToken } });
         if (authErr) return { error: 'パスワードが正しくありません' };
         // サーバー側で「管理する大会の全削除 → アカウント削除」を1トランザクションで実行
         const { error } = await supabase.rpc('delete_own_account');
@@ -551,7 +566,24 @@ export const useStore = create<StoreState>()((set, get) => {
     openMyPage: () => set({ myPageOpen: true }),
     closeMyPage: () => set({ myPageOpen: false }),
 
-    redeemCollabKey: async (eventId, key) => {
+    openPrivacy: () => set({ privacyOpen: true }),
+    closePrivacy: () => set({ privacyOpen: false }),
+
+    redeemCollabKey: async (eventId, key, captchaToken) => {
+      // 未ログインなら匿名セッションを自動作成（審判はアカウント登録不要でキーだけで編集できる）
+      if (!get().user) {
+        set({ suppressAuthReload: true });
+        try {
+          const { data: anonData, error: anonErr } = await supabase.auth.signInAnonymously({ options: { captchaToken } });
+          if (anonErr || !anonData.user) {
+            console.error('[FencingDraw] Anonymous sign-in failed:', anonErr);
+            return { ok: false, error: '認証に失敗しました。時間をおいて再度お試しください。' };
+          }
+          set({ user: anonData.user });
+        } finally {
+          set({ suppressAuthReload: false });
+        }
+      }
       const { data, error } = await supabase.rpc('redeem_collab_key', {
         p_tournament_id: eventId,
         p_key: key,

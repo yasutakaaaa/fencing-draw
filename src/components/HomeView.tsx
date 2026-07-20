@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useStore, categoryLabel } from '../store/useStore';
 import type { TournamentEvent, EventStatus, Weapon, Gender, AgeCategory, TournamentFormat } from '../types';
 import LoginModal from './LoginModal';
+import Footer from './Footer';
 
 const PAGE_SIZE = 20;
 
@@ -206,6 +207,9 @@ export default function HomeView() {
   const [pendingEventId, setPendingEventId] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
 
+  // 匿名（編集キー）セッションはアカウント保有者として扱わない
+  const isRealUser = !!user && !user.is_anonymous;
+
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     // 進行中 → 未開催 → 終了 の順でソート
@@ -242,13 +246,13 @@ export default function HomeView() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-blue-700 shadow-md">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-white text-xl font-black tracking-tight shrink-0">
             Fencing<span className="text-blue-300">Draw</span>
           </span>
           <input
             type="search"
-            className="flex-1 max-w-sm border border-blue-500 bg-blue-800 text-white placeholder-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-white"
+            className="order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:max-w-sm min-w-0 border border-blue-500 bg-blue-800 text-white placeholder-blue-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-white"
             placeholder="大会名・開催地で検索…"
             value={query}
             onChange={e => { setQuery(e.target.value); setActivePage(0); setArchivePage(0); }}
@@ -257,7 +261,7 @@ export default function HomeView() {
             {saveStatus === 'saving' && <span className="text-xs text-blue-200 animate-pulse hidden sm:inline">保存中…</span>}
             {saveStatus === 'saved'  && <span className="text-xs text-green-300 hidden sm:inline">✓ 保存済み</span>}
             {saveStatus === 'error'  && <span className="text-xs text-red-300 hidden sm:inline">⚠ 保存失敗</span>}
-            {user ? (
+            {isRealUser ? (
               <>
                 <button
                   className="bg-white text-blue-700 hover:bg-blue-50 font-bold text-sm px-4 py-1.5 rounded-lg transition-colors shadow"
@@ -268,7 +272,7 @@ export default function HomeView() {
                 <button
                   className="text-blue-200 hover:text-white text-xs border border-blue-500 px-2 py-1.5 rounded-lg"
                   onClick={openMyPage}
-                  title={user.email}
+                  title={user?.email}
                 >
                   マイページ
                 </button>
@@ -325,7 +329,7 @@ export default function HomeView() {
         )}
 
         {/* localStorage 移行バナー */}
-        {user && hasLocalData && (
+        {isRealUser && hasLocalData && (
           <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-amber-800">このデバイスにローカルデータが見つかりました</p>
@@ -354,7 +358,7 @@ export default function HomeView() {
         {active.length === 0 && !q ? (
           <div className="bg-white border border-gray-200 rounded-xl p-12 text-center mt-2">
             <p className="text-gray-400 mb-4">大会がありません</p>
-            {user ? (
+            {isRealUser ? (
               <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-lg text-sm"
                 onClick={() => setShowCreateEvent(true)}>
                 + 新しい大会を作成
@@ -394,6 +398,8 @@ export default function HomeView() {
           </div>
         )}
       </main>
+
+      <Footer />
 
       {showCreateEvent && (
         <CreateEventModal onClose={() => setShowCreateEvent(false)} onCreated={id => setPendingEventId(id)} />

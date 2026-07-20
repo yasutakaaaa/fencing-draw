@@ -13,14 +13,6 @@ async function waitForApp(page: import('@playwright/test').Page) {
   );
 }
 
-async function expandArchive(page: import('@playwright/test').Page) {
-  const archiveBtn = page.locator('button').filter({ hasText: /過去の大会（アーカイブ）/ }).first();
-  if (await archiveBtn.count() > 0) {
-    await archiveBtn.click();
-    await page.waitForTimeout(300);
-  }
-}
-
 // ── P1-1: URL ディープリンク ──────────────────────────────────────────
 
 test('P1-1a - 閲覧ビューに「共有」ボタンがある', async ({ page }) => {

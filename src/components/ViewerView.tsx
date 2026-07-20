@@ -3,6 +3,9 @@ import { useStore, useTournament, categoryLabel } from '../store/useStore';
 import { calcGlobalStats, applyAdvancement, calcPoolStats, getBoutOrder, calcFinalRankings } from '../utils/ranking';
 import type { Pool, Fencer, Bout, DEMatch } from '../types';
 import LoginModal from './LoginModal';
+import Footer from './Footer';
+import CaptchaWidget from './CaptchaWidget';
+import { isCaptchaConfigured } from '../lib/captcha';
 
 // ── フェイユ・ド・プール ───────────────────────────────────────────────
 function getCellResult(rowId: string, colId: string, bouts: Bout[]): string | null {
@@ -311,6 +314,77 @@ function readTabFromHash(): Tab | null {
   return tab && ALL_TABS.includes(tab) ? tab : null;
 }
 
+// ── 編集キー入力モーダル（審判・記録係向け、アカウント不要） ──────────
+function KeyRedeemModal({ eventId, onSuccess, onClose, onOwnerLogin }: {
+  eventId: string;
+  onSuccess: () => void;
+  onClose: () => void;
+  onOwnerLogin: () => void;
+}) {
+  const { redeemCollabKey } = useStore();
+  const user = useStore(state => state.user);
+  const [keyInput, setKeyInput] = useState('');
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+
+  const handleSubmit = async () => {
+    if (!/^\d{6}$/.test(keyInput)) { setError('6桁の数字を入力してください'); return; }
+    if (!user && !captchaToken) { setError('ボット対策の確認を完了してください'); return; }
+    setChecking(true);
+    setError('');
+    const res = await redeemCollabKey(eventId, keyInput, captchaToken ?? undefined);
+    setChecking(false);
+    if (res.ok) onSuccess();
+    else {
+      setError(res.error ?? 'キーが正しくありません');
+      if (!user) {
+        setCaptchaToken(null);
+        setCaptchaResetKey(value => value + 1);
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+        <h3 className="font-bold text-gray-800 text-lg mb-1">編集キーを入力</h3>
+        <p className="text-xs text-gray-400 mb-4">
+          大会本部から共有された6桁のキーを入力すると、アカウント登録なしで結果を入力できます。
+        </p>
+        <input
+          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-lg tracking-[0.4em] text-center focus:outline-none focus:ring-2 focus:ring-blue-400"
+          inputMode="numeric" maxLength={6} placeholder="123456" value={keyInput}
+          autoFocus
+          onChange={e => { setKeyInput(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+          onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+        />
+        {!user && <CaptchaWidget onTokenChange={setCaptchaToken} resetKey={captchaResetKey} />}
+        {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+        <button
+          disabled={checking || keyInput.length !== 6 || (!user && (!captchaToken || !isCaptchaConfigured))}
+          className="mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg py-2 text-sm font-bold transition-colors"
+          onClick={handleSubmit}
+        >
+          {checking ? '確認中…' : '編集を開始'}
+        </button>
+        <div className="mt-3 text-center">
+          <button className="text-xs text-blue-500 hover:underline" onClick={onOwnerLogin}>
+            大会オーナーの方はこちら（ログイン）
+          </button>
+        </div>
+        <button
+          className="mt-3 w-full border border-gray-200 text-gray-500 rounded-lg py-1.5 text-xs hover:bg-gray-50"
+          onClick={onClose}
+        >
+          キャンセル
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ViewerView() {
   const { setViewMode, closeTournament, closeEvent, openTournament, events, tournaments, user, lastUpdated, conflictWarning, dismissConflict, editorEventIds } = useStore();
   const currentEventId = useStore(s => s.currentEventId);
@@ -318,21 +392,22 @@ export default function ViewerView() {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>(() => readTabFromHash() ?? 'entry');
   const [showLogin, setShowLogin] = useState(false);
+  const [showKeyModal, setShowKeyModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showCatSelector, setShowCatSelector] = useState(false);
 
-  if (!tournament) return null;
-
-  const eventId = tournament.eventId ?? currentEventId ?? '';
+  const tournamentId = tournament?.id ?? '';
+  const tournamentEventId = tournament?.eventId;
+  const eventId = tournamentEventId ?? currentEventId ?? '';
   const event = events.find(e => e.id === eventId);
   const isOwner = !!user && user.id === event?.ownerId;
   const isEditor = editorEventIds.includes(eventId);
   const canEdit = isOwner || isEditor;
-  const eventName = event?.name ?? tournament.name;
-  const catLabel = tournament.name || categoryLabel(tournament);
+  const eventName = event?.name ?? tournament?.name ?? '';
+  const catLabel = tournament ? tournament.name || categoryLabel(tournament) : '';
 
   // 同一イベント内の他カテゴリ
-  const siblingCategories = event
+  const siblingCategories = event && tournament
     ? event.categoryIds
         .map(id => tournaments.find(t => t.id === id))
         .filter(Boolean)
@@ -341,19 +416,19 @@ export default function ViewerView() {
 
   const handleEditClick = () => {
     if (canEdit) setViewMode('admin');
-    else if (!user) setShowLogin(true);
+    else setShowKeyModal(true);
   };
 
   // タブ変化を URL ハッシュに同期
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateHash = useCallback((tab: Tab) => {
-    const evtId = tournament.eventId ?? currentEventId ?? '';
+    if (!tournamentId) return;
+    const evtId = tournamentEventId ?? currentEventId ?? '';
     if (evtId) {
-      window.location.hash = `/t/${evtId}/c/${tournament.id}?tab=${tab}`;
+      window.location.hash = `/t/${evtId}/c/${tournamentId}?tab=${tab}`;
     } else {
-      window.location.hash = `/t/${tournament.id}?tab=${tab}`;
+      window.location.hash = `/t/${tournamentId}?tab=${tab}`;
     }
-  }, [tournament.id, tournament.eventId, currentEventId]);
+  }, [tournamentId, tournamentEventId, currentEventId]);
 
   useEffect(() => {
     updateHash(activeTab);
@@ -368,6 +443,8 @@ export default function ViewerView() {
     window.addEventListener('hashchange', handler);
     return () => window.removeEventListener('hashchange', handler);
   }, []);
+
+  if (!tournament) return null;
 
   // 共有URL コピー
   const handleShare = async () => {
@@ -521,20 +598,18 @@ export default function ViewerView() {
                 onClick={() => window.print()}
                 title="印刷（プール表・トーナメント）"
               >🖨 印刷</button>
-              {/* 編集ボタン: オーナー・編集者または未ログインにのみ表示 */}
-              {(canEdit || !user) && (
-                <button
-                  className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
-                    canEdit
-                      ? 'border-blue-400 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600'
-                      : 'border-slate-500 text-slate-400 hover:text-slate-200'
-                  }`}
-                  onClick={handleEditClick}
-                  title={canEdit ? '管理モードへ切替' : 'ログインして編集'}
-                >
-                  {canEdit ? '✎ 編集' : '🔑 編集'}
-                </button>
-              )}
+              {/* 編集ボタン: 編集権があれば管理モードへ、なければ編集キー入力へ */}
+              <button
+                className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
+                  canEdit
+                    ? 'border-blue-400 text-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600'
+                    : 'border-slate-500 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={handleEditClick}
+                title={canEdit ? '管理モードへ切替' : '編集キーを入力して編集'}
+              >
+                {canEdit ? '✎ 編集' : '🔑 編集'}
+              </button>
             </div>
           </div>
 
@@ -960,7 +1035,17 @@ export default function ViewerView() {
         )}
       </main>
 
+      <Footer />
+
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showKeyModal && (
+        <KeyRedeemModal
+          eventId={eventId}
+          onSuccess={() => { setShowKeyModal(false); setViewMode('admin'); }}
+          onClose={() => setShowKeyModal(false)}
+          onOwnerLogin={() => { setShowKeyModal(false); setShowLogin(true); }}
+        />
+      )}
     </div>
   );
 }

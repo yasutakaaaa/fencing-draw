@@ -3,7 +3,7 @@ import { calcGlobalStats, applyAdvancement } from '../utils/ranking';
 import { exportDEResultsCSV, downloadCSV } from '../utils/csv';
 import { printDEResults } from '../utils/pdf';
 import type { DEMatch } from '../types';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 function MatchCard({
   match,
@@ -20,12 +20,6 @@ function MatchCard({
 }) {
   const [scoreA, setScoreA] = useState(match.scoreA?.toString() ?? '');
   const [scoreB, setScoreB] = useState(match.scoreB?.toString() ?? '');
-
-  // 「修正」でnullリセット時にローカル入力欄を同期
-  useEffect(() => {
-    setScoreA(match.scoreA?.toString() ?? '');
-    setScoreB(match.scoreB?.toString() ?? '');
-  }, [match.scoreA, match.scoreB]);
 
   if (match.isBye) {
     const winner = match.winner === 'A' ? match.fencerAId : match.fencerBId;
@@ -201,7 +195,7 @@ export default function BracketView() {
                 <div className="flex flex-col justify-around gap-4 flex-1">
                   {roundMatches.map(match => (
                     <MatchCard
-                      key={match.id}
+                      key={`${match.id}:${match.scoreA}:${match.scoreB}:${match.winner}`}
                       match={match}
                       fencerName={fencerName}
                       onUpdate={updates => updateDEMatch(match.id, updates)}
@@ -220,6 +214,7 @@ export default function BracketView() {
         <div className="border border-orange-200 rounded-xl p-4 bg-orange-50">
           <h3 className="text-sm font-bold text-orange-700 mb-3">3位決定戦</h3>
           <MatchCard
+            key={`${thirdPlaceMatch.id}:${thirdPlaceMatch.scoreA}:${thirdPlaceMatch.scoreB}:${thirdPlaceMatch.winner}`}
             match={thirdPlaceMatch}
             fencerName={fencerName}
             onUpdate={updates => updateDEMatch(thirdPlaceMatch.id, updates)}
