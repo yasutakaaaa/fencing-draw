@@ -59,7 +59,7 @@ export default function PrivacyPolicyView() {
 
           <Section title="4. 利用目的">
             <p>
-              取得した情報は、本サービスの提供・本人確認・不正利用の防止・お問い合わせ対応の目的にのみ利用し、
+              取得した情報は、本サービスの提供・本人確認・不正利用の防止の目的にのみ利用し、
               それ以外の目的には利用しません。
             </p>
           </Section>
@@ -85,11 +85,6 @@ export default function PrivacyPolicyView() {
             </p>
           </Section>
 
-          <Section title="8. お問い合わせ">
-            <p>
-              本ポリシーおよび個人情報の取り扱いに関するお問い合わせは、本サービスの運営者までご連絡ください。
-            </p>
-          </Section>
         </div>
       </main>
     </div>

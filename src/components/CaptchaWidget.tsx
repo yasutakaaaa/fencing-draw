@@ -11,7 +11,7 @@ export default function CaptchaWidget({
   if (!turnstileSiteKey) {
     return (
       <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700" role="alert">
-        CAPTCHAの設定が見つかりません。管理者にお問い合わせください。
+        CAPTCHAを利用できません。しばらくしてから再度お試しください。
       </p>
     );
   }
