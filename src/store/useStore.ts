@@ -308,6 +308,33 @@ export const useStore = create<StoreState>()((set, get) => {
   // 自分が起動した保存を Realtime ループから区別するフラグ
   let selfSaving = false;
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  // owner_id を DB と突き合わせ済みのイベントID（保存のたびに問い合わせないためのキャッシュ）
+  const ownerChecked = new Set<string>();
+
+  /**
+   * 保存に使う owner_id を決定する。
+   * - DB に行が無い（＝新規INSERT）→ 必ず現在のログインユーザー。
+   *   ローカルに残った古い ownerId（削除済みアカウント等）をそのまま送ると
+   *   RLS 違反(42501) / 外部キー違反(23503) で永久に保存できなくなるため。
+   * - DB に行がある → DB 側の owner_id を尊重する（共同編集者が保存しても
+   *   オーナーを書き換えない）。
+   */
+  async function resolveOwnerId(eventId: string, localOwnerId: string | undefined, userId: string): Promise<string> {
+    if (ownerChecked.has(eventId)) return localOwnerId ?? userId;
+    const { data, error } = await supabase
+      .from('tournaments')
+      .select('owner_id')
+      .eq('id', eventId)
+      .maybeSingle();
+    // 問い合わせ自体が失敗した場合は従来動作にフォールバック（保存を止めない）
+    if (error) return localOwnerId ?? userId;
+    const resolved = data ? (data.owner_id ?? userId) : userId;
+    ownerChecked.add(eventId);
+    if (resolved !== localOwnerId) {
+      set(s => ({ events: s.events.map(e => e.id === eventId ? { ...e, ownerId: resolved } : e) }));
+    }
+    return resolved;
+  }
 
   async function saveEvent(eventId: string) {
     const { events, tournaments, user } = get();
@@ -324,11 +351,11 @@ export const useStore = create<StoreState>()((set, get) => {
     set({ saveStatus: 'saving' });
     selfSaving = true;
     try {
+      // 既存行は DB の owner_id を保持し、DB に無ければ自分をオーナーとして INSERT する。
+      const ownerId = await resolveOwnerId(event.id, event.ownerId, user.id);
       const { error } = await supabase.from('tournaments').upsert({
         id: event.id,
-        // 既存イベントは元のオーナーを保持する（共同編集者が保存してもオーナーを書き換えない）。
-        // 新規イベントは createEvent 時点で ownerId = 作成者 が入っている。
-        owner_id: event.ownerId ?? user.id,
+        owner_id: ownerId,
         name: event.name,
         date: event.date || null,
         status: event.status,
@@ -339,6 +366,8 @@ export const useStore = create<StoreState>()((set, get) => {
       setTimeout(() => { if (get().saveStatus === 'saved') set({ saveStatus: 'idle' }); }, 2500);
     } catch (err) {
       console.error('[FencingDraw] Save failed:', err);
+      // 次回の保存で owner_id を再判定させる（オーナー情報のズレが原因の失敗を引きずらない）
+      ownerChecked.delete(event.id);
       const e = err as { code?: string; message?: string; status?: number };
       const msg = e?.message ?? '';
       let detail = `保存エラー: ${msg || '不明なエラー'}`;
