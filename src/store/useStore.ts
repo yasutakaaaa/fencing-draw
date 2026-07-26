@@ -310,6 +310,7 @@ export const useStore = create<StoreState>()((set, get) => {
   let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
   // owner_id を DB と突き合わせ済みのイベントID（保存のたびに問い合わせないためのキャッシュ）
   const ownerChecked = new Set<string>();
+  console.info('[FencingDraw] store build marker: owner-fix-2');
 
   /**
    * 保存に使う owner_id を決定する。
