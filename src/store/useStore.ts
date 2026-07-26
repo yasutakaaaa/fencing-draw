@@ -183,7 +183,10 @@ function parseSupabaseRows(rows: any[]): { events: TournamentEvent[]; tournament
     });
     const categories: Record<string, unknown> = data.categories ?? {};
     for (const cat of Object.values(categories)) {
-      tournaments.push(migrateTournament(cat));
+      const tournament = migrateTournament(cat);
+      // 大会全体が終了している場合、旧データのカテゴリ状態が進行中でも
+      // 表示上は終了として扱う。読み込みだけではDBを書き換えない。
+      tournaments.push(row.status === '終了' ? { ...tournament, status: '終了' } : tournament);
     }
   }
 
