@@ -10,6 +10,7 @@ import BracketView from './components/BracketView';
 import ResultsView from './components/ResultsView';
 import HistoryView from './components/HistoryView';
 import MyPageView from './components/MyPageView';
+import PasswordRecoveryView from './components/PasswordRecoveryView';
 import PrivacyPolicyView from './components/PrivacyPolicyView';
 import ViewerView from './components/ViewerView';
 import Footer from './components/Footer';
@@ -29,7 +30,8 @@ export default function App() {
   const {
     closeTournament, closeEvent, deleteEvent, logs, exportTournamentJSON, viewMode, setViewMode,
     events, tournaments, user, isLoading, saveStatus, saveErrorDetail, initializeStore, signOut, openTournament,
-    openEvent, editorEventIds, myPageOpen, openMyPage, privacyOpen, openPrivacy,
+    openEvent, editorEventIds, myPageOpen, openMyPage, passwordRecoveryOpen, openPasswordRecovery,
+    privacyOpen, openPrivacy,
   } = useStore();
   const tournament = useTournament();
   const tournamentId = tournament?.id;
@@ -46,6 +48,9 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       useStore.setState({ user: session?.user ?? null });
+      if (_event === 'PASSWORD_RECOVERY') {
+        openPasswordRecovery();
+      }
       if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
         initializeStore();
       }
@@ -148,6 +153,10 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  if (passwordRecoveryOpen) {
+    return <PasswordRecoveryView />;
   }
 
   // ── プライバシーポリシー ────────────────────────────────────────────

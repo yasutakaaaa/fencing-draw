@@ -52,19 +52,27 @@ function defaultTournament(id?: string): Tournament {
 function migrateTournament(raw: any): Tournament {
   if (Array.isArray(raw.phases)) {
     const fencers = (raw.fencers ?? []).map(stripLegacyFencer);
+    const phases = raw.phases.map((p: PhaseConfig) =>
+      p.type === 'de' && !(p as DEPhaseConfig).classificationPlacements
+        ? { ...(p as DEPhaseConfig), classificationPlacements: [] }
+        : p
+    );
+    // 3名DEでは3位決定戦が成立しないため、旧データに残ったTBD試合を補正する。
+    const phaseRuntimes = (raw.phaseRuntimes ?? []).map((runtime: PhaseRuntime) => {
+      if (runtime.type !== 'de' || (runtime.inputFencerIds?.length ?? 0) >= 4) return runtime;
+      return { ...runtime, deMatches: runtime.deMatches.filter(match => !match.isThirdPlace) };
+    });
+    const isResultsPhase = raw.activePhaseIdx >= phases.length;
     return {
       ...raw,
       fencers,
       ageCategory: raw.ageCategory ?? 'シニア',
       ageCategoryCustom: raw.ageCategoryCustom ?? '',
       format: raw.format ?? '個人',
-      status: raw.status ?? '準備中',
+      status: isResultsPhase ? '終了' : (raw.status ?? '準備中'),
       // DEPhaseConfig後方互換: classificationPlacements が未設定の場合補完
-      phases: Array.isArray(raw.phases) ? raw.phases.map((p: PhaseConfig) =>
-        p.type === 'de' && !(p as DEPhaseConfig).classificationPlacements
-          ? { ...(p as DEPhaseConfig), classificationPlacements: [] }
-          : p
-      ) : raw.phases,
+      phases,
+      phaseRuntimes,
     } as Tournament;
   }
 
@@ -214,6 +222,8 @@ interface StoreState {
   initializeStore: () => Promise<void>;
   signIn: (email: string, password: string, captchaToken: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string, captchaToken: string) => Promise<{ error?: string }>;
+  requestPasswordReset: (email: string, captchaToken: string) => Promise<{ error?: string }>;
+  completePasswordRecovery: (newPassword: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string, captchaToken: string) => Promise<{ error?: string }>;
   deleteAccount: (password: string, captchaToken: string) => Promise<{ error?: string }>;
@@ -221,9 +231,12 @@ interface StoreState {
 
   // ── マイページ ────────────────────────────────────────────
   myPageOpen: boolean;
+  passwordRecoveryOpen: boolean;
   suppressAuthReload: boolean; // 再認証（PW変更・アカウント削除・匿名認証）中はauthイベント起因の再ロードを抑止
   openMyPage: () => void;
   closeMyPage: () => void;
+  openPasswordRecovery: () => void;
+  closePasswordRecovery: () => void;
 
   // ── プライバシーポリシー ──────────────────────────────────
   privacyOpen: boolean;
@@ -423,6 +436,7 @@ export const useStore = create<StoreState>()((set, get) => {
     editorEventIds: [],
     collabEnabledMap: {},
     myPageOpen: false,
+    passwordRecoveryOpen: false,
     suppressAuthReload: false,
     privacyOpen: false,
 
@@ -534,6 +548,29 @@ export const useStore = create<StoreState>()((set, get) => {
       return {};
     },
 
+    requestPasswordReset: async (email, captchaToken) => {
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.searchParams.set('password-reset', '1');
+      redirectUrl.hash = '';
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl.toString(),
+        captchaToken,
+      });
+      if (error) return { error: '再設定メールの送信に失敗しました。時間をおいて再度お試しください。' };
+      return {};
+    },
+
+    completePasswordRecovery: async (newPassword) => {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        if (/same|different from the old/i.test(error.message)) {
+          return { error: '現在とは異なるパスワードを設定してください。' };
+        }
+        return { error: '再設定リンクの有効期限が切れている可能性があります。もう一度メールを送信してください。' };
+      }
+      return {};
+    },
+
     signOut: async () => {
       await supabase.auth.signOut();
       set({ user: null, currentId: null, currentEventId: null, viewMode: 'viewer', editorEventIds: [], collabEnabledMap: {}, myPageOpen: false });
@@ -594,6 +631,14 @@ export const useStore = create<StoreState>()((set, get) => {
 
     openMyPage: () => set({ myPageOpen: true }),
     closeMyPage: () => set({ myPageOpen: false }),
+    openPasswordRecovery: () => set({ passwordRecoveryOpen: true, myPageOpen: false, privacyOpen: false }),
+    closePasswordRecovery: () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('password-reset');
+      url.hash = '';
+      history.replaceState('', document.title, `${url.pathname}${url.search}`);
+      set({ passwordRecoveryOpen: false });
+    },
 
     openPrivacy: () => set({ privacyOpen: true }),
     closePrivacy: () => set({ privacyOpen: false }),
@@ -914,7 +959,7 @@ export const useStore = create<StoreState>()((set, get) => {
       set(s => ({
         tournaments: updateCurrent(s.tournaments, s.currentId, t => {
           const nextIdx = t.activePhaseIdx + 1;
-          if (nextIdx >= t.phases.length) return { ...t, activePhaseIdx: t.phases.length };
+          if (nextIdx >= t.phases.length) return { ...t, activePhaseIdx: t.phases.length, status: '終了' };
           const nextConfig = t.phases[nextIdx];
           const existingRuntime = t.phaseRuntimes.find(r => r.phaseId === nextConfig.id);
           if (existingRuntime) return { ...t, activePhaseIdx: nextIdx };

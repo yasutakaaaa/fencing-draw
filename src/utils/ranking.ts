@@ -136,8 +136,8 @@ export function calcFinalRankings(
     const l = thirdPlaceMatch.winner === 'A' ? thirdPlaceMatch.fencerBId : thirdPlaceMatch.fencerAId;
     if (w) results.push({ fencerId: w, finalRank: nextRank++ });
     if (l) results.push({ fencerId: l, finalRank: nextRank++ });
-  } else if (!hasThirdPlace && maxRound >= 2) {
-    // 3位決定戦なし: 準決勝敗者2名が同3位
+  } else if ((!hasThirdPlace || !thirdPlaceMatch) && maxRound >= 2) {
+    // 3位決定戦なし、または3名DE: 準決勝敗者を3位とする
     const sfLosers = mainMatches
       .filter(m => m.round === maxRound - 1 && m.winner !== null)
       .map(m => (m.winner === 'A' ? m.fencerBId : m.fencerAId))

@@ -116,6 +116,23 @@ describe('calcFinalRankings - 8名DEトーナメント (3決なし)', () => {
   });
 });
 
+describe('calcFinalRankings - 3名DEトーナメント (3決設定あり)', () => {
+  const stats = make8Stats().slice(0, 3);
+  const rawBracket = buildBracket(stats, true);
+  const played = playAllMatches(rawBracket);
+
+  it('成立しない3位決定戦を生成しない', () => {
+    expect(rawBracket.find(match => match.isThirdPlace)).toBeUndefined();
+  });
+
+  it('準決勝敗者を自動的に3位として全員を順位付けする', () => {
+    const results = calcFinalRankings(played, stats, true);
+    expect(results.map(result => result.finalRank).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    expect(results.map(result => result.fencerId).sort()).toEqual(['f1', 'f2', 'f3']);
+  });
+
+});
+
 describe('calcFinalRankings - 途中棄権あり', () => {
   it('棄権者は最下位になる', () => {
     const stats = make8Stats();

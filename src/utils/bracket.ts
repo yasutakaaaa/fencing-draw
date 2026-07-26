@@ -90,7 +90,8 @@ export function buildBracket(advancedStats: FencerStats[], thirdPlace: boolean):
   }
 
   // 3rd place match
-  if (thirdPlace && numRounds >= 2) {
+  // 3名では準決勝敗者が1名しか存在せず、3位決定戦が成立しない。
+  if (thirdPlace && n >= 4 && numRounds >= 2) {
     matches.push({
       id: generateId(),
       round: numRounds,

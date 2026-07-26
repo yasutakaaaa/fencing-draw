@@ -115,6 +115,31 @@ test('04 - アカウント登録フォームへの切り替え', async ({ page }
   await page.locator('button').filter({ hasText: 'キャンセル' }).click();
 });
 
+test('04a - パスワード再設定フォームへの切り替え', async ({ page }) => {
+  await waitForApp(page);
+  if (await page.locator('button').filter({ hasText: 'ログアウト' }).count() > 0) {
+    test.skip(true, '認証済みのためスキップ');
+    return;
+  }
+  await page.locator('button').filter({ hasText: 'ログイン' }).first().click();
+  await page.getByRole('button', { name: 'パスワードを忘れた方' }).click();
+  await expect(page.getByRole('heading', { name: 'パスワードを再設定' })).toBeVisible();
+  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'ログイン画面に戻る' }).click();
+  await expect(page.getByRole('heading', { name: '管理者ログイン' })).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル' }).click();
+});
+
+test('04b - クエリ文字列だけではパスワード更新画面を開かない', async ({ page }) => {
+  await page.goto('/?password-reset=1');
+  await page.waitForFunction(
+    () => !document.body.innerText.includes('サーバーに接続中'),
+    { timeout: 20000 }
+  );
+  await expect(page.getByRole('heading', { name: '新しいパスワードを設定' })).toHaveCount(0);
+});
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 【管理テスト】storageState でログイン済み状態が共有される
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
