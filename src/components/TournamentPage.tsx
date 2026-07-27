@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore, categoryLabel } from '../store/useStore';
 import type { TournamentEvent, EventStatus, Weapon, Gender, AgeCategory, TournamentFormat } from '../types';
+import { arePoolsComplete, printPoolSheets, printDEBracketSheets } from '../utils/pdf';
 import Footer from './Footer';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -96,13 +97,16 @@ function AddCategoryModal({ eventId, onClose }: { eventId: string; onClose: () =
 
 // ── 大会編集モーダル ──────────────────────────────────────────────────
 function EditEventModal({ event, isOwner, onClose }: { event: TournamentEvent; isOwner: boolean; onClose: () => void }) {
-  const { updateEvent, collabEnabledMap, setCollabSettings } = useStore();
+  const { tournaments, updateEvent, collabEnabledMap, setCollabSettings } = useStore();
   const [form, setForm] = useState({ name: event.name, date: event.date, venue: event.venue, status: event.status });
   const originalCollabEnabled = collabEnabledMap[event.id] ?? false;
   const [collabEnabled, setCollabEnabled] = useState(originalCollabEnabled);
   const [collabKey, setCollabKey] = useState('');
   const [collabError, setCollabError] = useState('');
   const [saving, setSaving] = useState(false);
+  const categories = event.categoryIds
+    .map(id => tournaments.find(tournament => tournament.id === id))
+    .filter(Boolean) as (typeof tournaments[0])[];
 
   const handleSave = async () => {
     updateEvent(event.id, form);
@@ -126,7 +130,7 @@ function EditEventModal({ event, isOwner, onClose }: { event: TournamentEvent; i
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-gray-800 text-lg mb-4">大会情報を編集</h3>
         <div className="space-y-3">
           <div>
@@ -154,6 +158,61 @@ function EditEventModal({ event, isOwner, onClose }: { event: TournamentEvent; i
               <option value="未">未</option><option value="実施中">実施中</option><option value="終了">終了</option>
             </select>
           </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <h4 className="text-sm font-bold text-gray-700">審判用 記録シート</h4>
+              <p className="text-xs text-gray-400 mt-0.5">印刷画面からPDF保存できます</p>
+            </div>
+            <span className="text-xs text-gray-400 shrink-0">A4横</span>
+          </div>
+          {categories.length === 0 ? (
+            <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-3">カテゴリを追加すると出力できます</p>
+          ) : (
+            <div className="space-y-2">
+              {categories.map(category => {
+                const poolRuntime = [...category.phaseRuntimes].reverse().find(runtime => runtime.type === 'pool');
+                const deRuntime = [...category.phaseRuntimes].reverse().find(runtime => runtime.type === 'de');
+                const hasPools = poolRuntime?.type === 'pool' && poolRuntime.pools.length > 0;
+                const hasBracket = deRuntime?.type === 'de' && deRuntime.deMatches.length > 0;
+                const poolComplete = hasPools && arePoolsComplete(category);
+                return (
+                  <div key={category.id} className="border border-gray-200 rounded-lg px-3 py-2.5">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">{category.name || categoryLabel(category)}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={!hasPools}
+                        className="text-xs font-medium border border-blue-200 text-blue-700 hover:bg-blue-50 rounded-lg px-2 py-2 disabled:border-gray-200 disabled:text-gray-300 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                        onClick={() => printPoolSheets(category, event)}
+                        title={hasPools ? (poolComplete ? '1プールにつき1枚で結果を印刷' : '1プールにつき1枚で記録用紙を印刷') : '先にプール分けを作成してください'}
+                      >
+                        {poolComplete ? 'プール結果PDF' : 'プール記録用PDF'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!hasBracket}
+                        className="text-xs font-medium border border-purple-200 text-purple-700 hover:bg-purple-50 rounded-lg px-2 py-2 disabled:border-gray-200 disabled:text-gray-300 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                        onClick={() => printDEBracketSheets(category, event)}
+                        title={hasBracket ? '16名単位で分割して印刷' : '先にトーナメント表を作成してください'}
+                      >
+                        トーナメント記録用PDF
+                      </button>
+                    </div>
+                    {(!hasPools || !hasBracket) && (
+                      <p className="text-[11px] text-gray-400 mt-1.5">
+                        {!hasPools && !hasBracket
+                          ? 'プール分け・トーナメント作成後に利用できます'
+                          : !hasPools ? 'プール分け後にプール用紙を出力できます' : 'トーナメント作成後にトーナメント用紙を出力できます'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {isOwner && (

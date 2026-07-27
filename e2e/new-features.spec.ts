@@ -113,7 +113,7 @@ test('F06 - プール表タブで試合順序が表示される', async ({ page 
   await page.waitForTimeout(800);
 
   // 「試合順序」セクションが存在すること
-  await expect(page.locator('text=試合順序（FIE推奨）').first()).toBeVisible({ timeout: 8000 });
+  await expect(page.locator('text=試合順序').first()).toBeVisible({ timeout: 8000 });
   // 試合番号が表示されること
   await expect(page.locator('text=#1').first()).toBeVisible({ timeout: 3000 });
 });
@@ -260,6 +260,7 @@ test('F11 - 【完了】大会でトーナメントタブが表示される', as
 // ── 編集ボタン統一確認 ────────────────────────────────────────────
 
 test('F12 - 閲覧モードのヘッダーに編集専用ボタンのみ存在する', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
   await waitForApp(page);
   const row = page.locator('text=【未開催】春季大会').first();
   await row.click();
@@ -272,6 +273,9 @@ test('F12 - 閲覧モードのヘッダーに編集専用ボタンのみ存在�
   const header = page.locator('header');
   await expect(header.locator('button').filter({ hasText: '＋ カテゴリ' })).not.toBeVisible();
   await expect(header.locator('button').filter({ hasText: '大会編集' })).not.toBeVisible();
+
+  // スマホ縦向きでも印刷ボタンが表示されること
+  await expect(header.locator('button').filter({ hasText: '印刷' })).toBeVisible();
 
   // 「編集」または「🔑 編集（要ログイン）」ボタンは存在すること
   const editBtn = header.locator('button').filter({ hasText: /編集/ }).first();

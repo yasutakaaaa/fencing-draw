@@ -149,7 +149,7 @@ function BoutSchedule({ pool, fencers }: { pool: Pool; fencers: Fencer[] }) {
 
   return (
     <div className="mt-4 border-t border-gray-100 pt-4">
-      <p className="text-xs font-semibold text-gray-500 mb-2">試合順序（FIE推奨）</p>
+      <p className="text-xs font-semibold text-gray-500 mb-2">試合順序</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
         {order.map(([a, b], i) => {
           const result = getBoutResult(a, b);
@@ -594,10 +594,10 @@ export default function ViewerView() {
               </button>
               {/* 印刷ボタン */}
               <button
-                className="text-xs px-2.5 py-1 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors hidden sm:inline"
+                className="inline-flex items-center text-xs px-1.5 sm:px-2.5 py-1 rounded border border-slate-500 text-slate-300 hover:text-white hover:border-slate-300 transition-colors whitespace-nowrap"
                 onClick={() => window.print()}
                 title="印刷（プール表・トーナメント）"
-              >🖨 印刷</button>
+              ><span className="hidden sm:inline">🖨&nbsp;</span>印刷</button>
               {/* 編集ボタン: 編集権があれば管理モードへ、なければ編集キー入力へ */}
               <button
                 className={`text-xs px-2.5 py-1 rounded border transition-colors font-medium ${
