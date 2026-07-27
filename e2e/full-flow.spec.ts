@@ -109,7 +109,7 @@ test('04 - アカウント登録フォームへの切り替え', async ({ page }
   await page.locator('button').filter({ hasText: 'ログイン' }).first().click();
   await page.locator('text=アカウントを新規作成').click();
   await expect(page.locator('text=新規アカウント登録')).toBeVisible();
-  await page.locator('text=すでにアカウントをお持ちの方').click();
+  await page.getByRole('button', { name: 'ログイン画面に戻る' }).click();
   await expect(page.locator('text=管理者ログイン')).toBeVisible();
   await ss(page, '04-signup-switch');
   await page.locator('button').filter({ hasText: 'キャンセル' }).click();

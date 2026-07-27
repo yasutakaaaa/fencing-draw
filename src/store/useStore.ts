@@ -418,6 +418,14 @@ export const useStore = create<StoreState>()((set, get) => {
     else scheduleSave(t.eventId);
   }
 
+  /** 現在のカテゴリを更新し、同じ保存タイミングで大会全体を永続化する。 */
+  function updateCurrentTournament(updater: (tournament: Tournament) => Tournament, immediate = false) {
+    set(state => ({
+      tournaments: updateCurrent(state.tournaments, state.currentId, updater),
+    }));
+    saveCurrentEvent(immediate);
+  }
+
   // ── localStorage マイグレーション検出 ─────────────────────
   const LS_KEY = 'fencing-tournament-v2';
   const hasLocalData = !!localStorage.getItem(LS_KEY);
@@ -843,161 +851,147 @@ export const useStore = create<StoreState>()((set, get) => {
     setViewMode: (mode) => set({ viewMode: mode }),
 
     // ── 大会設定 ────────────────────────────────────────────
-    setTournamentField: (field, value) => {
-      set(s => ({ tournaments: updateCurrent(s.tournaments, s.currentId, t => ({ ...t, [field]: value })) }));
-      saveCurrentEvent();
-    },
+    setTournamentField: (field, value) =>
+      updateCurrentTournament(tournament => ({ ...tournament, [field]: value })),
 
-    setPhases: (phases) => {
-      set(s => ({ tournaments: updateCurrent(s.tournaments, s.currentId, t => ({ ...t, phases })) }));
-      saveCurrentEvent();
-    },
+    setPhases: phases =>
+      updateCurrentTournament(tournament => ({ ...tournament, phases })),
 
-    updatePhaseConfig: (phaseId, updates) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t, phases: t.phases.map(p => p.id === phaseId ? { ...p, ...updates } as PhaseConfig : p),
-        })),
-      }));
-      saveCurrentEvent();
-    },
+    updatePhaseConfig: (phaseId, updates) =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        phases: tournament.phases.map(phase =>
+          phase.id === phaseId ? { ...phase, ...updates } as PhaseConfig : phase
+        ),
+      })),
 
-    setPoolPhaseField: (key, value) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => {
-          const pp = t.phases.find(p => p.type === 'pool') as PoolPhaseConfig | undefined;
-          if (!pp) return t;
-          return { ...t, phases: t.phases.map(p => p.id === pp.id ? { ...p, [key]: value } : p) };
-        }),
-      }));
-      saveCurrentEvent();
-    },
+    setPoolPhaseField: (key, value) =>
+      updateCurrentTournament(tournament => {
+        const poolPhase = tournament.phases.find(phase => phase.type === 'pool') as PoolPhaseConfig | undefined;
+        if (!poolPhase) return tournament;
+        return {
+          ...tournament,
+          phases: tournament.phases.map(phase =>
+            phase.id === poolPhase.id ? { ...phase, [key]: value } : phase
+          ),
+        };
+      }),
 
-    setDEPhaseField: (key, value) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => {
-          const dp = t.phases.find(p => p.type === 'de') as DEPhaseConfig | undefined;
-          if (!dp) return t;
-          return { ...t, phases: t.phases.map(p => p.id === dp.id ? { ...p, [key]: value } : p) };
-        }),
-      }));
-      saveCurrentEvent();
-    },
+    setDEPhaseField: (key, value) =>
+      updateCurrentTournament(tournament => {
+        const dePhase = tournament.phases.find(phase => phase.type === 'de') as DEPhaseConfig | undefined;
+        if (!dePhase) return tournament;
+        return {
+          ...tournament,
+          phases: tournament.phases.map(phase =>
+            phase.id === dePhase.id ? { ...phase, [key]: value } : phase
+          ),
+        };
+      }),
 
     // ── 選手管理 ────────────────────────────────────────────
-    addFencer: fencer => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t, fencers: [...t.fencers, { ...fencer, id: generateId() }],
-        })),
-      }));
-      saveCurrentEvent(true);
-    },
+    addFencer: fencer =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        fencers: [...tournament.fencers, { ...fencer, id: generateId() }],
+      }), true),
 
-    updateFencer: (id, updates) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t, fencers: t.fencers.map(f => f.id === id ? { ...f, ...updates } : f),
-        })),
-      }));
-      saveCurrentEvent();
-    },
+    updateFencer: (id, updates) =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        fencers: tournament.fencers.map(fencer => fencer.id === id ? { ...fencer, ...updates } : fencer),
+      })),
 
-    deleteFencer: id => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t, fencers: t.fencers.filter(f => f.id !== id),
-        })),
-      }));
-      saveCurrentEvent(true);
-    },
+    deleteFencer: id =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        fencers: tournament.fencers.filter(fencer => fencer.id !== id),
+      }), true),
 
-    importFencers: fencers => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t, fencers: [...t.fencers, ...fencers.map(f => ({ ...f, id: generateId() }))],
-        })),
-      }));
-      saveCurrentEvent();
-    },
+    importFencers: fencers =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        fencers: [...tournament.fencers, ...fencers.map(fencer => ({ ...fencer, id: generateId() }))],
+      })),
 
     // ── フェーズ遷移 ────────────────────────────────────────
-    startFirstPhase: () => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => {
-          const firstConfig = t.phases[0];
-          if (!firstConfig) return t;
+    startFirstPhase: () =>
+      updateCurrentTournament(tournament => {
+          const firstConfig = tournament.phases[0];
+          if (!firstConfig) return tournament;
           let newRuntime: PhaseRuntime;
-          const inputFencerIds = t.fencers.map(f => f.id);
+          const inputFencerIds = tournament.fencers.map(fencer => fencer.id);
           if (firstConfig.type === 'pool') {
-            const pools = assignPools(t.fencers, firstConfig.maxPoolSize);
+            const pools = assignPools(tournament.fencers, firstConfig.maxPoolSize);
             newRuntime = { phaseId: firstConfig.id, type: 'pool', pools, subPhase: 'running', inputFencerIds };
           } else {
-            const fakeStats: FencerStats[] = t.fencers.map((f, i) => ({
-              fencerId: f.id, victories: 0, matches: 0, vm: 0,
-              touchesScored: 0, touchesReceived: 0, indicator: 0, poolRank: i + 1, globalRank: i + 1, advanced: true,
+            const fakeStats: FencerStats[] = tournament.fencers.map((fencer, index) => ({
+              fencerId: fencer.id, victories: 0, matches: 0, vm: 0,
+              touchesScored: 0, touchesReceived: 0, indicator: 0,
+              poolRank: index + 1, globalRank: index + 1, advanced: true,
             }));
             const deMatches = buildBracket(fakeStats, (firstConfig as DEPhaseConfig).thirdPlace);
             newRuntime = { phaseId: firstConfig.id, type: 'de', deMatches, inputFencerIds };
           }
-          const existingRuntimes = t.phaseRuntimes.filter(r => r.phaseId !== firstConfig.id);
-          return { ...t, phaseRuntimes: [...existingRuntimes, newRuntime], activePhaseIdx: 0, status: '進行中' };
-        }),
-      }));
-      saveCurrentEvent(true);
-    },
+          const existingRuntimes = tournament.phaseRuntimes.filter(runtime => runtime.phaseId !== firstConfig.id);
+          return {
+            ...tournament,
+            phaseRuntimes: [...existingRuntimes, newRuntime],
+            activePhaseIdx: 0,
+            status: '進行中',
+          };
+      }, true),
 
-    setPoolSubPhase: (sub) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => {
-          const config = getActiveConfig(t);
-          if (!config || config.type !== 'pool') return t;
-          return { ...t, phaseRuntimes: t.phaseRuntimes.map(r => r.phaseId === config.id && r.type === 'pool' ? { ...r, subPhase: sub } : r) };
-        }),
-      }));
-      saveCurrentEvent(true);
-    },
+    setPoolSubPhase: sub =>
+      updateCurrentTournament(tournament => {
+        const config = getActiveConfig(tournament);
+        if (!config || config.type !== 'pool') return tournament;
+        return {
+          ...tournament,
+          phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+            runtime.phaseId === config.id && runtime.type === 'pool' ? { ...runtime, subPhase: sub } : runtime
+          ),
+        };
+      }, true),
 
-    startNextPhase: () => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => {
-          const nextIdx = t.activePhaseIdx + 1;
-          if (nextIdx >= t.phases.length) return { ...t, activePhaseIdx: t.phases.length, status: '終了' };
-          const nextConfig = t.phases[nextIdx];
-          const existingRuntime = t.phaseRuntimes.find(r => r.phaseId === nextConfig.id);
-          if (existingRuntime) return { ...t, activePhaseIdx: nextIdx };
-          const advancedIds = computeAdvancedFencerIds(t);
+    startNextPhase: () =>
+      updateCurrentTournament(tournament => {
+          const nextIdx = tournament.activePhaseIdx + 1;
+          if (nextIdx >= tournament.phases.length) {
+            return { ...tournament, activePhaseIdx: tournament.phases.length, status: '終了' };
+          }
+          const nextConfig = tournament.phases[nextIdx];
+          const existingRuntime = tournament.phaseRuntimes.find(runtime => runtime.phaseId === nextConfig.id);
+          if (existingRuntime) return { ...tournament, activePhaseIdx: nextIdx };
+          const advancedIds = computeAdvancedFencerIds(tournament);
           let newRuntime: PhaseRuntime;
           if (nextConfig.type === 'pool') {
-            const inputFencers = advancedIds.map(id => t.fencers.find(f => f.id === id)).filter(Boolean) as Fencer[];
+            const inputFencers = advancedIds
+              .map(id => tournament.fencers.find(fencer => fencer.id === id))
+              .filter(Boolean) as Fencer[];
             const pools = assignPools(inputFencers, nextConfig.maxPoolSize);
             newRuntime = { phaseId: nextConfig.id, type: 'pool', pools, subPhase: 'running', inputFencerIds: advancedIds };
           } else {
-            const fakeStats: FencerStats[] = advancedIds.map((id, i) => ({
+            const fakeStats: FencerStats[] = advancedIds.map((id, index) => ({
               fencerId: id, victories: 0, matches: 0, vm: 0,
-              touchesScored: 0, touchesReceived: 0, indicator: 0, poolRank: i + 1, globalRank: i + 1, advanced: true,
+              touchesScored: 0, touchesReceived: 0, indicator: 0,
+              poolRank: index + 1, globalRank: index + 1, advanced: true,
             }));
             const deMatches = buildBracket(fakeStats, nextConfig.thirdPlace);
             newRuntime = { phaseId: nextConfig.id, type: 'de', deMatches, inputFencerIds: advancedIds };
           }
-          const existingRuntimes = t.phaseRuntimes.filter(r => r.phaseId !== nextConfig.id);
-          return { ...t, phaseRuntimes: [...existingRuntimes, newRuntime], activePhaseIdx: nextIdx };
-        }),
-      }));
-      saveCurrentEvent(true);
-    },
+          const existingRuntimes = tournament.phaseRuntimes.filter(runtime => runtime.phaseId !== nextConfig.id);
+          return { ...tournament, phaseRuntimes: [...existingRuntimes, newRuntime], activePhaseIdx: nextIdx };
+      }, true),
 
-    goBackToEntry: () => {
-      set(s => ({ tournaments: updateCurrent(s.tournaments, s.currentId, t => ({ ...t, activePhaseIdx: -1 })) }));
-      saveCurrentEvent(true);
-    },
+    goBackToEntry: () =>
+      updateCurrentTournament(tournament => ({ ...tournament, activePhaseIdx: -1 }), true),
 
-    goToPreviousPhase: () => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({ ...t, activePhaseIdx: Math.max(-1, t.activePhaseIdx - 1) })),
-      }));
-      saveCurrentEvent(true);
-    },
+    goToPreviousPhase: () =>
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        activePhaseIdx: Math.max(-1, tournament.activePhaseIdx - 1),
+      }), true),
 
     generatePools: () => get().startFirstPhase(),
     generateBracket: () => get().startNextPhase(),
@@ -1009,77 +1003,67 @@ export const useStore = create<StoreState>()((set, get) => {
     },
 
     // ── プールスコア ────────────────────────────────────────
-    updateBout: (poolId, boutId, updates) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t,
-          phaseRuntimes: t.phaseRuntimes.map(r =>
-            r.type !== 'pool' ? r : {
-              ...r,
-              pools: r.pools.map(p =>
-                p.id !== poolId ? p : { ...p, bouts: p.bouts.map(b => b.id !== boutId ? b : { ...b, ...updates }) }
-              ),
-            }
-          ),
-        })),
-      }));
-      saveCurrentEvent(); // debounced 1.5s
-    },
-
-    setBoutPiste: (poolId, boutId, pisteNumber) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t,
-          phaseRuntimes: t.phaseRuntimes.map(r =>
-            r.type !== 'pool' ? r : {
-              ...r,
-              pools: r.pools.map(p =>
-                p.id !== poolId ? p : {
-                  ...p,
-                  bouts: p.bouts.map(b => b.id !== boutId ? b : { ...b, pisteNumber }),
+    updateBout: (poolId, boutId, updates) =>
+      updateCurrentTournament(tournament => ({
+          ...tournament,
+          phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+            runtime.type !== 'pool' ? runtime : {
+              ...runtime,
+              pools: runtime.pools.map(pool =>
+                pool.id !== poolId ? pool : {
+                  ...pool,
+                  bouts: pool.bouts.map(bout => bout.id !== boutId ? bout : { ...bout, ...updates }),
                 }
               ),
             }
           ),
-        })),
-      }));
-      saveCurrentEvent(true);
-    },
+      })),
 
-    setFencerWithdrawn: (poolId, fencerId, withdrawn) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t,
-          phaseRuntimes: t.phaseRuntimes.map(r =>
-            r.type !== 'pool' ? r : {
-              ...r,
-              pools: r.pools.map(p => {
-                if (p.id !== poolId) return p;
-                const current = p.withdrawnFencerIds ?? [];
+    setBoutPiste: (poolId, boutId, pisteNumber) =>
+      updateCurrentTournament(tournament => ({
+          ...tournament,
+          phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+            runtime.type !== 'pool' ? runtime : {
+              ...runtime,
+              pools: runtime.pools.map(pool =>
+                pool.id !== poolId ? pool : {
+                  ...pool,
+                  bouts: pool.bouts.map(bout => bout.id !== boutId ? bout : { ...bout, pisteNumber }),
+                }
+              ),
+            }
+          ),
+      }), true),
+
+    setFencerWithdrawn: (poolId, fencerId, withdrawn) =>
+      updateCurrentTournament(tournament => ({
+          ...tournament,
+          phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+            runtime.type !== 'pool' ? runtime : {
+              ...runtime,
+              pools: runtime.pools.map(pool => {
+                if (pool.id !== poolId) return pool;
+                const current = pool.withdrawnFencerIds ?? [];
                 const next = withdrawn
                   ? [...new Set([...current, fencerId])]
                   : current.filter(id => id !== fencerId);
-                return { ...p, withdrawnFencerIds: next };
+                return { ...pool, withdrawnFencerIds: next };
               }),
             }
           ),
-        })),
-      }));
-      saveCurrentEvent(true);
-    },
+      }), true),
 
     // ── DEブラケット ────────────────────────────────────────
-    updateDEMatch: (matchId, updates) => {
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, t => ({
-          ...t,
-          phaseRuntimes: t.phaseRuntimes.map(r =>
-            r.type !== 'de' ? r : { ...r, deMatches: r.deMatches.map(m => m.id !== matchId ? m : { ...m, ...updates }) }
+    updateDEMatch: (matchId, updates) =>
+      updateCurrentTournament(tournament => ({
+          ...tournament,
+          phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+            runtime.type !== 'de' ? runtime : {
+              ...runtime,
+              deMatches: runtime.deMatches.map(match => match.id !== matchId ? match : { ...match, ...updates }),
+            }
           ),
-        })),
-      }));
-      saveCurrentEvent();
-    },
+      })),
 
     confirmDEMatch: matchId => {
       const { tournaments, currentId } = get();
@@ -1088,12 +1072,12 @@ export const useStore = create<StoreState>()((set, get) => {
       const deRuntime = getActiveRuntime(t) as DEPhaseRuntime | null;
       if (!deRuntime || deRuntime.type !== 'de') return;
       const updated = advanceWinner(deRuntime.deMatches, matchId);
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, x => ({
-          ...x, phaseRuntimes: x.phaseRuntimes.map(r => r.phaseId === deRuntime.phaseId ? { ...r, deMatches: updated } : r),
-        })),
-      }));
-      saveCurrentEvent(true);
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+          runtime.phaseId === deRuntime.phaseId ? { ...runtime, deMatches: updated } : runtime
+        ),
+      }), true);
     },
 
     revertDEMatch: matchId => {
@@ -1103,12 +1087,12 @@ export const useStore = create<StoreState>()((set, get) => {
       const deRuntime = getActiveRuntime(t) as DEPhaseRuntime | null;
       if (!deRuntime || deRuntime.type !== 'de') return;
       const updated = revertDEMatchUtil(deRuntime.deMatches, matchId);
-      set(s => ({
-        tournaments: updateCurrent(s.tournaments, s.currentId, x => ({
-          ...x, phaseRuntimes: x.phaseRuntimes.map(r => r.phaseId === deRuntime.phaseId ? { ...r, deMatches: updated } : r),
-        })),
-      }));
-      saveCurrentEvent(true);
+      updateCurrentTournament(tournament => ({
+        ...tournament,
+        phaseRuntimes: tournament.phaseRuntimes.map(runtime =>
+          runtime.phaseId === deRuntime.phaseId ? { ...runtime, deMatches: updated } : runtime
+        ),
+      }), true);
     },
 
     // ── ログ ────────────────────────────────────────────────
@@ -1127,6 +1111,7 @@ export const useStore = create<StoreState>()((set, get) => {
         logs: [entry, ...logs],
         tournaments: updateCurrent(s.tournaments, s.currentId, x => ({ ...x, status: '終了' })),
       }));
+      // logsも同時更新するため、カテゴリ専用ヘルパーには統合しない。
       saveCurrentEvent(true);
       return logId;
     },
@@ -1143,6 +1128,7 @@ export const useStore = create<StoreState>()((set, get) => {
         const tournaments = exists ? s.tournaments.map(t => t.id === restored.id ? restored : t) : [restored, ...s.tournaments];
         return { tournaments, currentId: restored.id };
       });
+      // currentIdを復元先へ切り替えてから、その大会を保存する必要がある。
       saveCurrentEvent(true);
     },
 
